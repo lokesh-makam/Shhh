@@ -51,7 +51,6 @@ export class UserManager {
 
 	createRoom(socket: WebSocket, maxSize: number) {
 		const roomId = this.generateRoomId();
-		// const userId = randomUUID();
 		if (maxSize < 2 || maxSize > 10) {
 			console.error("room size should be from 2-10");
 			return {
@@ -63,16 +62,6 @@ export class UserManager {
 			socket: new Set(),
 			maxSize,
 		});
-		// this.users.set(userId, {
-		// 	userId,
-		// 	name: "lokesh",
-		// 	type: "ADMIN",
-		// 	roomId,
-		// 	socket,
-		// });
-		// this.socketToUser.set(socket, userId);
-		// console.log(JSON.stringify(this.users.get(userId)) + "room");
-		// console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
 
 		return {
 			ok: true,
@@ -106,8 +95,6 @@ export class UserManager {
 			socket,
 		});
 		this.socketToUser.set(socket, userId);
-		console.log(JSON.stringify(this.users.get(userId)) + "room");
-		console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
 		return {
 			ok: true,
 			roomId,
