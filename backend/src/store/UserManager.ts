@@ -36,8 +36,8 @@ export class UserManager {
 	}
 
 	createRoom(socket: WebSocket, maxSize: number) {
-		const roomId = nanoid();
-		const userId = randomUUID();
+		const roomId = nanoid().toString();
+		const userId = randomUUID().toString();
 		if (maxSize < 2) {
 			console.error("room size should be minimum 2");
 			return;

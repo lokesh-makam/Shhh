@@ -24,15 +24,22 @@ wss.on("connection", (ws: WebSocket) => {
 		const payload = data.payload;
 		if (type === "JOIN_ROOM") {
 			userManager.joinChat(payload.roomId, ws);
-			console.log(" joined the chat");
 		}
 		if (type === "CREATE_ROOM") {
-			const roomId = userManager.createRoom(ws, payload.maxSize);
-			console.log("room created id:" + roomId);
+			const { roomId, userId } = userManager.createRoom(ws, payload.maxSize)!;
+			console.log("room created id:" + JSON.stringify(roomId));
+			ws.send(
+				JSON.stringify({
+					type: "ROOM_CREATED",
+					payload: {
+						roomId,
+						userId,
+					},
+				}),
+			);
 		}
 		if (type === "SEND_MESSAGE") {
 			userManager.broadcast(payload.message, ws);
-			console.log("message sent");
 		}
 		if (type == "TERMINATE") {
 			userManager.terminate(payload.roomId);

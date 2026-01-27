@@ -22,21 +22,19 @@ wss.on("connection", (ws) => {
         const type = data.type;
         const payload = data.payload;
         if (type === "JOIN_ROOM") {
-            userManager.joinChat(payload.roomId, payload.userId, ws);
-            console.log(" joined the chat");
+            userManager.joinChat(payload.roomId, ws);
         }
         if (type === "CREATE_ROOM") {
-            userManager.createRoom(payload.roomId, payload.userId, ws, payload.maxSize);
-            console.log("room created");
+            const roomId = userManager.createRoom(ws, payload.maxSize);
+            console.log("room created id:" + JSON.stringify(roomId));
+            ws.send(JSON.stringify({
+                roomId,
+            }));
         }
         if (type === "SEND_MESSAGE") {
-            userManager.broadcast(payload.roomId, payload.userId, payload.message);
-            console.log("message sent");
+            userManager.broadcast(payload.message, ws);
         }
         if (type == "TERMINATE") {
-            if (payload.type != "ADMIN") {
-                return;
-            }
             userManager.terminate(payload.roomId);
         }
     });

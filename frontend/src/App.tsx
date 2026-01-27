@@ -1,14 +1,19 @@
-import { useState } from 'react'
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Home from "./components/Home";
+import Join from "./components/Join";
+import { SocketProvider } from "./context/SocketProvider";
 
 function App() {
-
-  return (
-    <>
-      <div>
-        
-      </div>
-    </>
-  )
+	return (
+		<SocketProvider>
+			<BrowserRouter>
+				<Routes>
+					<Route path="/" element={<Home />} />
+					<Route path="/join/:roomId/:userId" element={<Join />} />
+				</Routes>
+			</BrowserRouter>
+		</SocketProvider>
+	);
 }
 
-export default App
+export default App;

@@ -1,6 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserManager = void 0;
+const crypto_1 = require("crypto");
+const nanoid_1 = require("nanoid");
+const nanoid = (0, nanoid_1.customAlphabet)("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 6);
 class UserManager {
     constructor() {
         this.rooms = new Map();
@@ -11,20 +14,9 @@ class UserManager {
         var _a;
         return (_a = this.rooms.get(roomId)) !== null && _a !== void 0 ? _a : null;
     }
-    sendMessage(userId, message) {
-        const user = this.users.get(userId);
-        if (!user) {
-            console.log("you are not in the room");
-            return;
-        }
-        const room = this.getRoom(user.roomId);
-        if (!room) {
-            console.error("romm not found");
-            return;
-        }
-        this.broadcast(user.roomId, userId, message);
-    }
-    createRoom(roomId, userId, socket, maxSize) {
+    createRoom(socket, maxSize) {
+        const roomId = nanoid();
+        const userId = (0, crypto_1.randomUUID)();
         if (maxSize < 2) {
             console.error("room size should be minimum 2");
             return;
@@ -47,16 +39,13 @@ class UserManager {
         this.socketToUser.set(socket, userId);
         console.log(JSON.stringify(this.users.get(userId)) + "room");
         console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
+        return { roomId, userId };
     }
-    joinChat(roomId, userId, socket) {
+    joinChat(roomId, socket) {
+        const userId = (0, crypto_1.randomUUID)();
         const room = this.getRoom(roomId);
         if (!room) {
             console.log("room not exist 1");
-            return;
-        }
-        const user = this.users.get(userId);
-        if (user) {
-            console.log("user already present in the room");
             return;
         }
         if (room.maxSize <= room.socket.size) {
@@ -97,15 +86,17 @@ class UserManager {
             }, 10000);
         }
     }
-    broadcast(roomId, userId, message) {
+    broadcast(message, ws) {
+        const userId = this.socketToUser.get(ws);
+        const roomId = this.users.get(userId).roomId;
         const room = this.rooms.get(roomId);
         const user = this.users.get(userId);
         if (!room || !user) {
-            console.log("room not exist 2");
+            console.error("room not exist 2");
             return;
         }
-        for (const ws of room.socket) {
-            ws.send(JSON.stringify({
+        for (const s of room.socket) {
+            s.send(JSON.stringify({
                 event: "message",
                 data: {
                     userId,
@@ -115,18 +106,22 @@ class UserManager {
         }
         console.log("message sent" + message);
     }
-    terminate(roomId) {
-        const room = this.rooms.get(roomId);
-        if (!room) {
-            console.log("room not exist 3");
+    terminate(ws) {
+        const userId = this.socketToUser.get(ws);
+        if (!userId)
             return;
+        const user = this.users.get(userId);
+        if (!user)
+            return;
+        if (user.type !== "ADMIN")
+            return;
+        const room = this.rooms.get(user.roomId);
+        if (!room)
+            return;
+        for (const client of room.socket) {
+            client.close();
         }
-        for (const ws of room.socket) {
-            this.users.delete(this.socketToUser.get(ws));
-            this.socketToUser.delete(ws);
-            ws.close();
-        }
-        this.rooms.delete(roomId);
+        this.rooms.delete(user.roomId);
     }
     handleDisconnect(ws) {
         const userId = this.socketToUser.get(ws);
