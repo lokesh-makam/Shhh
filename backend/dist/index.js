@@ -21,23 +21,21 @@ wss.on("connection", (ws) => {
         const type = data.type;
         const payload = data.payload;
         if (type === "JOIN_ROOM") {
-            const { roomId, userId } = userManager.joinChat(payload.roomId, ws);
+            const roomId = userManager.joinChat(payload.roomId, ws);
             ws.send(JSON.stringify({
                 type: "JOINED_ROOM",
                 payload: {
                     roomId,
-                    userId,
                 },
             }));
         }
         if (type === "CREATE_ROOM") {
-            const { roomId, userId } = userManager.createRoom(ws, payload.maxSize);
+            const roomId = userManager.createRoom(ws, payload.maxSize);
             console.log("room created id:" + JSON.stringify(roomId));
             ws.send(JSON.stringify({
                 type: "ROOM_CREATED",
                 payload: {
                     roomId,
-                    userId,
                 },
             }));
         }

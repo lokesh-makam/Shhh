@@ -17,8 +17,8 @@ class UserManager {
     createRoom(socket, maxSize) {
         const roomId = nanoid().toString();
         const userId = (0, crypto_1.randomUUID)().toString();
-        if (maxSize < 2) {
-            console.error("room size should be minimum 2");
+        if (maxSize < 2 || maxSize > 10) {
+            console.error("room size should be from 2-10");
             return;
         }
         if (this.getRoom(roomId)) {
@@ -39,13 +39,18 @@ class UserManager {
         this.socketToUser.set(socket, userId);
         console.log(JSON.stringify(this.users.get(userId)) + "room");
         console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
-        return { roomId, userId };
+        return roomId;
     }
     joinChat(roomId, socket) {
         const userId = (0, crypto_1.randomUUID)();
         const room = this.getRoom(roomId);
         if (!room) {
-            console.log("room not exist 1");
+            socket.send(JSON.stringify({
+                type: "JOIN_FAILED",
+                payload: {
+                    reason: "Room not found",
+                },
+            }));
             return;
         }
         if (room.maxSize <= room.socket.size) {
@@ -64,7 +69,7 @@ class UserManager {
         this.socketToUser.set(socket, userId);
         console.log(JSON.stringify(this.users.get(userId)) + "room");
         console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
-        return { roomId, userId };
+        return roomId;
     }
     leaveChat(roomId, userId) {
         const room = this.getRoom(roomId);
