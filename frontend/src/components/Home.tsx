@@ -19,6 +19,10 @@ export default function Home() {
 			if (data.type === "ROOM_CREATED") {
 				navigate(`/join/${data.payload.roomId}`);
 			}
+			if (data.type === "ERROR") {
+				const message = data.payload.message;
+				setError(message + "Please try again");
+			}
 		};
 
 		ws.addEventListener("message", handler);

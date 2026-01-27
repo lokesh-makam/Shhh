@@ -39,6 +39,7 @@ wss.on("connection", (ws: WebSocket) => {
 					type: "JOINED_ROOM",
 					payload: {
 						roomId: result.roomId,
+						type: result.type,
 					},
 				}),
 			);

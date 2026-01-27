@@ -31,25 +31,32 @@ export class UserManager {
 		this.socketToUser = new Map<WebSocket, string>();
 	}
 
+	private generateRoomId(): string {
+		let id;
+		do {
+			id = nanoid();
+		} while (this.rooms.has(id));
+		return id;
+	}
+	private generateUserId(): string {
+		let id;
+		do {
+			id = randomUUID();
+		} while (this.users.has(id));
+		return id;
+	}
 	getRoom(roomId: string) {
 		return this.rooms.get(roomId) ?? null;
 	}
 
 	createRoom(socket: WebSocket, maxSize: number) {
-		const roomId = nanoid().toString();
-		const userId = randomUUID().toString();
+		const roomId = this.generateRoomId();
+		const userId = randomUUID();
 		if (maxSize < 2 || maxSize > 10) {
 			console.error("room size should be from 2-10");
 			return {
 				ok: false,
-				error: "ROOM_FULL",
-			};
-		}
-		if (this.getRoom(roomId)) {
-			console.log("romm already there please join");
-			return {
-				ok: false,
-				error: "ROOM_DUPLICATE",
+				error: "INVALID_ROOM_SIZE",
 			};
 		}
 		this.rooms.set(roomId, {
@@ -74,7 +81,7 @@ export class UserManager {
 	}
 
 	joinChat(roomId: string, socket: WebSocket) {
-		const userId = randomUUID();
+		const userId = this.generateUserId();
 		const room = this.getRoom(roomId);
 		if (!room) {
 			return {
@@ -104,6 +111,7 @@ export class UserManager {
 		return {
 			ok: true,
 			roomId,
+			type,
 		};
 	}
 
