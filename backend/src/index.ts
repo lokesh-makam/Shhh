@@ -15,25 +15,29 @@ const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws: WebSocket) => {
 	console.log("Client connected");
-
-	ws.send("Hello from server");
-
 	ws.on("message", (msg) => {
 		const data = JSON.parse(msg.toString());
 		const type = data.type;
 		const payload = data.payload;
 		if (type === "JOIN_ROOM") {
-			userManager.joinChat(payload.roomId, ws);
+			const roomId = userManager.joinChat(payload.roomId, ws)!;
+			ws.send(
+				JSON.stringify({
+					type: "JOINED_ROOM",
+					payload: {
+						roomId,
+					},
+				}),
+			);
 		}
 		if (type === "CREATE_ROOM") {
-			const { roomId, userId } = userManager.createRoom(ws, payload.maxSize)!;
+			const roomId = userManager.createRoom(ws, payload.maxSize)!;
 			console.log("room created id:" + JSON.stringify(roomId));
 			ws.send(
 				JSON.stringify({
 					type: "ROOM_CREATED",
 					payload: {
 						roomId,
-						userId,
 					},
 				}),
 			);

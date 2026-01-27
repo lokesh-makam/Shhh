@@ -60,14 +60,21 @@ export class UserManager {
 		this.socketToUser.set(socket, userId);
 		console.log(JSON.stringify(this.users.get(userId)) + "room");
 		console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
-		return { roomId, userId };
+		return roomId;
 	}
 
 	joinChat(roomId: string, socket: WebSocket) {
 		const userId = randomUUID();
 		const room = this.getRoom(roomId);
 		if (!room) {
-			console.log("room not exist 1");
+			socket.send(
+				JSON.stringify({
+					type: "JOIN_FAILED",
+					payload: {
+						reason: "Room not found",
+					},
+				}),
+			);
 			return;
 		}
 		if (room.maxSize <= room.socket.size) {
@@ -86,6 +93,7 @@ export class UserManager {
 		this.socketToUser.set(socket, userId);
 		console.log(JSON.stringify(this.users.get(userId)) + "room");
 		console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
+		return roomId;
 	}
 
 	leaveChat(roomId: string, userId: string) {

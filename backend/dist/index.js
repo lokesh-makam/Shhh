@@ -16,19 +16,29 @@ const server = http_1.default.createServer(app);
 const wss = new ws_1.WebSocketServer({ server });
 wss.on("connection", (ws) => {
     console.log("Client connected");
-    ws.send("Hello from server");
     ws.on("message", (msg) => {
         const data = JSON.parse(msg.toString());
         const type = data.type;
         const payload = data.payload;
         if (type === "JOIN_ROOM") {
-            userManager.joinChat(payload.roomId, ws);
+            const { roomId, userId } = userManager.joinChat(payload.roomId, ws);
+            ws.send(JSON.stringify({
+                type: "JOINED_ROOM",
+                payload: {
+                    roomId,
+                    userId,
+                },
+            }));
         }
         if (type === "CREATE_ROOM") {
-            const roomId = userManager.createRoom(ws, payload.maxSize);
+            const { roomId, userId } = userManager.createRoom(ws, payload.maxSize);
             console.log("room created id:" + JSON.stringify(roomId));
             ws.send(JSON.stringify({
-                roomId,
+                type: "ROOM_CREATED",
+                payload: {
+                    roomId,
+                    userId,
+                },
             }));
         }
         if (type === "SEND_MESSAGE") {

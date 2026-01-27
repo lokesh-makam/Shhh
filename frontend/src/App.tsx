@@ -9,7 +9,7 @@ function App() {
 			<BrowserRouter>
 				<Routes>
 					<Route path="/" element={<Home />} />
-					<Route path="/join/:roomId/:userId" element={<Join />} />
+					<Route path="/join/:roomId" element={<Join />} />
 				</Routes>
 			</BrowserRouter>
 		</SocketProvider>

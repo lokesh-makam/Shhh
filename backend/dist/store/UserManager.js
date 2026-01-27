@@ -15,8 +15,8 @@ class UserManager {
         return (_a = this.rooms.get(roomId)) !== null && _a !== void 0 ? _a : null;
     }
     createRoom(socket, maxSize) {
-        const roomId = nanoid();
-        const userId = (0, crypto_1.randomUUID)();
+        const roomId = nanoid().toString();
+        const userId = (0, crypto_1.randomUUID)().toString();
         if (maxSize < 2) {
             console.error("room size should be minimum 2");
             return;
@@ -64,6 +64,7 @@ class UserManager {
         this.socketToUser.set(socket, userId);
         console.log(JSON.stringify(this.users.get(userId)) + "room");
         console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
+        return { roomId, userId };
     }
     leaveChat(roomId, userId) {
         const room = this.getRoom(roomId);
