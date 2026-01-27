@@ -10,73 +10,98 @@ class UserManager {
         this.users = new Map();
         this.socketToUser = new Map();
     }
+    generateRoomId() {
+        let id;
+        do {
+            id = nanoid();
+        } while (this.rooms.has(id));
+        return id;
+    }
+    generateUserId() {
+        let id;
+        do {
+            id = (0, crypto_1.randomUUID)();
+        } while (this.users.has(id));
+        return id;
+    }
     getRoom(roomId) {
         var _a;
         return (_a = this.rooms.get(roomId)) !== null && _a !== void 0 ? _a : null;
     }
     createRoom(socket, maxSize) {
-        const roomId = nanoid().toString();
-        const userId = (0, crypto_1.randomUUID)().toString();
+        const roomId = this.generateRoomId();
+        // const userId = randomUUID();
         if (maxSize < 2 || maxSize > 10) {
             console.error("room size should be from 2-10");
-            return;
-        }
-        if (this.getRoom(roomId)) {
-            console.log("romm already there please join");
-            return;
+            return {
+                ok: false,
+                error: "INVALID_ROOM_SIZE",
+            };
         }
         this.rooms.set(roomId, {
-            socket: new Set([socket]),
+            socket: new Set(),
             maxSize,
         });
-        this.users.set(userId, {
-            userId,
-            name: "lokesh",
-            type: "ADMIN",
+        // this.users.set(userId, {
+        // 	userId,
+        // 	name: "lokesh",
+        // 	type: "ADMIN",
+        // 	roomId,
+        // 	socket,
+        // });
+        // this.socketToUser.set(socket, userId);
+        // console.log(JSON.stringify(this.users.get(userId)) + "room");
+        // console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
+        return {
+            ok: true,
             roomId,
-            socket,
-        });
-        this.socketToUser.set(socket, userId);
-        console.log(JSON.stringify(this.users.get(userId)) + "room");
-        console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
-        return roomId;
+        };
     }
     joinChat(roomId, socket) {
-        const userId = (0, crypto_1.randomUUID)();
+        var _a;
+        const userId = this.generateUserId();
         const room = this.getRoom(roomId);
         if (!room) {
-            socket.send(JSON.stringify({
-                type: "JOIN_FAILED",
-                payload: {
-                    reason: "Room not found",
-                },
-            }));
-            return;
+            return {
+                ok: false,
+                error: "ROOM_NOT_FOUND",
+            };
         }
         if (room.maxSize <= room.socket.size) {
             console.log("room is full");
-            return;
+            return {
+                ok: false,
+                error: "INVALID_ROOM_SIZE",
+            };
         }
-        const type = room.socket.size == 0 ? "ADMIN" : "USER";
+        const role = room.socket.size == 0 ? "ADMIN" : "USER";
         room.socket.add(socket);
         this.users.set(userId, {
             userId,
             name: "lokesh",
-            type,
+            role,
             roomId,
             socket,
         });
         this.socketToUser.set(socket, userId);
         console.log(JSON.stringify(this.users.get(userId)) + "room");
         console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
-        return roomId;
+        return {
+            ok: true,
+            roomId,
+            role,
+            name: (_a = this.users.get(userId)) === null || _a === void 0 ? void 0 : _a.name,
+        };
     }
     leaveChat(roomId, userId) {
         const room = this.getRoom(roomId);
         const user = this.users.get(userId);
         if (!room || !user) {
             console.log("room or User not exists");
-            return;
+            return {
+                ok: false,
+                error: "ROOM_NOT_EXISTS",
+            };
         }
         room.socket.delete(user.socket);
         this.socketToUser.delete(user.socket);
@@ -91,54 +116,87 @@ class UserManager {
                 }
             }, 10000);
         }
+        return { ok: true, message: "ROOM_LEFT" };
     }
     broadcast(message, ws) {
         const userId = this.socketToUser.get(ws);
+        if (!userId) {
+            return { ok: false, error: "USER_NOT_FOUND" };
+        }
         const roomId = this.users.get(userId).roomId;
         const room = this.rooms.get(roomId);
         const user = this.users.get(userId);
         if (!room || !user) {
             console.error("room not exist 2");
-            return;
+            return {
+                ok: false,
+                error: "ROOM_NOT_EXISTS",
+            };
         }
         for (const s of room.socket) {
+            if (s === ws)
+                continue;
             s.send(JSON.stringify({
-                event: "message",
-                data: {
+                type: "MESSAGE",
+                payload: {
                     userId,
                     message,
                 },
             }));
         }
         console.log("message sent" + message);
+        return { ok: true, message: "MESSAGE_SENT" };
     }
     terminate(ws) {
         const userId = this.socketToUser.get(ws);
-        if (!userId)
-            return;
+        if (!userId) {
+            return {
+                ok: false,
+                error: "USER_NOT_FOUND",
+            };
+        }
         const user = this.users.get(userId);
-        if (!user)
-            return;
-        if (user.type !== "ADMIN")
-            return;
+        if (!user) {
+            return {
+                ok: false,
+                error: "USER_NOT_FOUND",
+            };
+        }
+        if (user.role !== "ADMIN") {
+            return {
+                ok: false,
+                error: "NOT_ADMIN",
+            };
+        }
         const room = this.rooms.get(user.roomId);
-        if (!room)
-            return;
+        if (!room) {
+            return {
+                ok: false,
+                error: "ROOM_NOT_FOUND",
+            };
+        }
         for (const client of room.socket) {
             client.close();
         }
         this.rooms.delete(user.roomId);
+        return { ok: true, message: "SESSION_TERMINATED" };
     }
     handleDisconnect(ws) {
         const userId = this.socketToUser.get(ws);
         if (!userId) {
             console.log("room not exist 4");
-            return;
+            return {
+                ok: false,
+                error: "USER_NOT_FOUND",
+            };
         }
         const user = this.users.get(userId);
         if (!user) {
             console.log("room not exist 5");
-            return;
+            return {
+                ok: false,
+                error: "USER_NOT_FOUND",
+            };
         }
         this.leaveChat(user.roomId, userId);
     }

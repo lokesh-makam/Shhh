@@ -14,6 +14,14 @@ app.get("/", (req, res) => {
 });
 const server = http_1.default.createServer(app);
 const wss = new ws_1.WebSocketServer({ server });
+function sendError(ws, message) {
+    ws.send(JSON.stringify({
+        type: "ERROR",
+        payload: {
+            message,
+        },
+    }));
+}
 wss.on("connection", (ws) => {
     console.log("Client connected");
     ws.on("message", (msg) => {
@@ -21,29 +29,51 @@ wss.on("connection", (ws) => {
         const type = data.type;
         const payload = data.payload;
         if (type === "JOIN_ROOM") {
-            const roomId = userManager.joinChat(payload.roomId, ws);
+            const result = userManager.joinChat(payload.roomId, ws);
+            if (!result.ok) {
+                sendError(ws, result.error);
+                return;
+            }
             ws.send(JSON.stringify({
                 type: "JOINED_ROOM",
                 payload: {
-                    roomId,
+                    roomId: result.roomId,
+                    role: result.role,
+                    name: result.name,
                 },
             }));
         }
         if (type === "CREATE_ROOM") {
-            const roomId = userManager.createRoom(ws, payload.maxSize);
-            console.log("room created id:" + JSON.stringify(roomId));
+            const result = userManager.createRoom(ws, payload.maxSize);
+            if (!result.ok) {
+                sendError(ws, result.error);
+                return;
+            }
+            console.log("room created id:" + JSON.stringify(result.roomId));
             ws.send(JSON.stringify({
                 type: "ROOM_CREATED",
                 payload: {
-                    roomId,
+                    roomId: result.roomId,
                 },
             }));
         }
         if (type === "SEND_MESSAGE") {
-            userManager.broadcast(payload.message, ws);
+            const result = userManager.broadcast(payload.message, ws);
+            if (!result.ok) {
+                sendError(ws, result.error);
+                return;
+            }
+            ws.send(JSON.stringify({
+                type: "MESSAGE_SENT",
+                payload: {},
+            }));
         }
         if (type == "TERMINATE") {
-            userManager.terminate(payload.roomId);
+            const result = userManager.terminate(ws);
+            if (!result.ok) {
+                sendError(ws, result.error);
+                return;
+            }
         }
     });
     ws.on("close", () => {

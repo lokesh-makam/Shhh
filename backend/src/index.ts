@@ -39,7 +39,8 @@ wss.on("connection", (ws: WebSocket) => {
 					type: "JOINED_ROOM",
 					payload: {
 						roomId: result.roomId,
-						type: result.type,
+						role: result.role,
+						name: result.name,
 					},
 				}),
 			);
@@ -74,7 +75,7 @@ wss.on("connection", (ws: WebSocket) => {
 			);
 		}
 		if (type == "TERMINATE") {
-			const result = userManager.terminate(payload.roomId);
+			const result = userManager.terminate(ws);
 			if (!result.ok) {
 				sendError(ws, result.error!);
 				return;

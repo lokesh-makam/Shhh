@@ -11,7 +11,7 @@ export interface Chat {
 export interface User {
 	userId: string;
 	roomId: string;
-	type: "ADMIN" | "USER";
+	role: "ADMIN" | "USER";
 	name: string;
 	socket: WebSocket;
 }
@@ -51,7 +51,7 @@ export class UserManager {
 
 	createRoom(socket: WebSocket, maxSize: number) {
 		const roomId = this.generateRoomId();
-		const userId = randomUUID();
+		// const userId = randomUUID();
 		if (maxSize < 2 || maxSize > 10) {
 			console.error("room size should be from 2-10");
 			return {
@@ -60,19 +60,19 @@ export class UserManager {
 			};
 		}
 		this.rooms.set(roomId, {
-			socket: new Set([socket]),
+			socket: new Set(),
 			maxSize,
 		});
-		this.users.set(userId, {
-			userId,
-			name: "lokesh",
-			type: "ADMIN",
-			roomId,
-			socket,
-		});
-		this.socketToUser.set(socket, userId);
-		console.log(JSON.stringify(this.users.get(userId)) + "room");
-		console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
+		// this.users.set(userId, {
+		// 	userId,
+		// 	name: "lokesh",
+		// 	type: "ADMIN",
+		// 	roomId,
+		// 	socket,
+		// });
+		// this.socketToUser.set(socket, userId);
+		// console.log(JSON.stringify(this.users.get(userId)) + "room");
+		// console.log(JSON.stringify(this.rooms.get(roomId)) + "room");
 
 		return {
 			ok: true,
@@ -96,12 +96,12 @@ export class UserManager {
 				error: "INVALID_ROOM_SIZE",
 			};
 		}
-		const type = room.socket.size == 0 ? "ADMIN" : "USER";
+		const role = room.socket.size == 0 ? "ADMIN" : "USER";
 		room.socket.add(socket);
 		this.users.set(userId, {
 			userId,
 			name: "lokesh",
-			type,
+			role,
 			roomId,
 			socket,
 		});
@@ -111,7 +111,8 @@ export class UserManager {
 		return {
 			ok: true,
 			roomId,
-			type,
+			role,
+			name: this.users.get(userId)?.name,
 		};
 	}
 
@@ -158,6 +159,7 @@ export class UserManager {
 			};
 		}
 		for (const s of room.socket) {
+			if (s === ws) continue;
 			s.send(
 				JSON.stringify({
 					type: "MESSAGE",
@@ -188,7 +190,7 @@ export class UserManager {
 			};
 		}
 
-		if (user.type !== "ADMIN") {
+		if (user.role !== "ADMIN") {
 			return {
 				ok: false,
 				error: "NOT_ADMIN",
