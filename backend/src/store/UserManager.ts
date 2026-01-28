@@ -124,7 +124,8 @@ export class UserManager {
 
 		console.log("user left the chat..");
 		console.log("No of players present in the chat are " + room.socket.size);
-		if (room.joinOrder.length > 0) {
+
+		if (user.role === "ADMIN" || room.joinOrder.length > 0) {
 			const curUser = this.users.get(room.joinOrder[0]);
 
 			if (!curUser) {
@@ -134,32 +135,19 @@ export class UserManager {
 					error: "ROOM_NOT_EXISTS",
 				};
 			}
-			if (user.role === "ADMIN") {
-				curUser.role = "ADMIN";
-				curUser.socket.send(
-					JSON.stringify({
-						type: "ADMIN_CHANGED",
-						payload: {
-							userId,
-							role: user.role,
-							maxSize: room.maxSize,
-							size: room.socket.size,
-						},
-					}),
-				);
-			} else {
-				curUser.socket.send(
-					JSON.stringify({
-						type: "LEFT_CHAT",
-						payload: {
-							userId,
-							role: user.role,
-							size: room.socket.size,
-						},
-					}),
-				);
-			}
+			curUser.role = "ADMIN";
+			curUser.socket.send(
+				JSON.stringify({
+					type: "ADMIN_CHANGED",
+					payload: {
+						userId,
+						role: user.role,
+						maxSize: room.maxSize,
+					},
+				}),
+			);
 		}
+
 		if (room.socket.size == 0) {
 			setTimeout(() => {
 				if (room.socket.size == 0) {

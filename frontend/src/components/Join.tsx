@@ -28,7 +28,6 @@ export default function Join() {
 	const { roomId } = useParams();
 	const ws = useContext(SocketContext);
 	const [maxSize, setMaxsize] = useState(2);
-	const [size, setSize] = useState(2);
 	const [status, setStatus] = useState<"loading" | "joined" | "invalid">("loading");
 	const [message, setMessage] = useState("");
 	const [messages, setMessages] = useState<Chat[]>([]);
@@ -38,8 +37,6 @@ export default function Join() {
 	const [copied, setCopied] = useState(false);
 	const [replyingTo, setReplyingTo] = useState<Chat | null>(null);
 	const [uploadingMedia, setUploadingMedia] = useState(false);
-	const [draggedMessage, setDraggedMessage] = useState<string | null>(null);
-	const [dragStartX, setDragStartX] = useState(0);
 	const [previewMedia, setPreviewMedia] = useState<{
 		url: string;
 		type: string;
@@ -147,7 +144,6 @@ export default function Join() {
 				if (data.type === "ADMIN_CHANGED") {
 					setRole(data.payload.role);
 					setMaxsize(data.payload.maxSize.toString());
-					setSize(data.payload.size.toString());
 				}
 
 				if (data.type === "MESSAGE") {
@@ -162,10 +158,6 @@ export default function Join() {
 						},
 					]);
 				}
-				if (data.type === "LEFT_CHAT") {
-					setSize(data.payload.size);
-				}
-
 				// ⭐ store meta
 				if (data.type === "MEDIA_META") {
 					lastMetaRef.current = {
@@ -324,43 +316,11 @@ export default function Join() {
 		inputRef.current?.focus();
 	}
 
-	/* ---------------- REPLY HANDLER ---------------- */
-	function handleReply(msg: Chat) {
-		setReplyingTo(msg);
-		inputRef.current?.focus();
-	}
-
 	function cancelReply() {
 		setReplyingTo(null);
 	}
 
 	/* ---------------- DOUBLE CLICK TO REPLY (WEB) ---------------- */
-	function handleDoubleClick(msg: Chat) {
-		handleReply(msg);
-	}
-
-	/* ---------------- DRAG TO REPLY (MOBILE) ---------------- */
-	function handleTouchStart(e: React.TouchEvent, msgId: string) {
-		setDragStartX(e.touches[0].clientX);
-		setDraggedMessage(msgId);
-	}
-
-	function handleTouchMove(e: React.TouchEvent, msg: Chat) {
-		if (!draggedMessage) return;
-
-		const currentX = e.touches[0].clientX;
-		const diff = currentX - dragStartX;
-
-		// If dragged more than 50px to the right, trigger reply
-		if (diff > 50) {
-			handleReply(msg);
-			setDraggedMessage(null);
-		}
-	}
-
-	function handleTouchEnd() {
-		setDraggedMessage(null);
-	}
 
 	/* ---------------- EMOJI CATEGORIES ---------------- */
 	const emojiCategories = {
