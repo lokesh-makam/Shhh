@@ -80,7 +80,7 @@ class UserManager {
             roomId,
             role,
             name: (_a = this.users.get(userId)) === null || _a === void 0 ? void 0 : _a.name,
-            maxSize: room.maxSize,
+            maxSize: room.socket.size,
         };
     }
     leaveChat(roomId, userId) {
@@ -99,7 +99,7 @@ class UserManager {
         this.users.delete(userId);
         console.log("user left the chat..");
         console.log("No of players present in the chat are " + room.socket.size);
-        if (user.role === "ADMIN" && room.joinOrder.length > 0) {
+        if (room.joinOrder.length > 0) {
             const curUser = this.users.get(room.joinOrder[0]);
             if (!curUser) {
                 console.log("room or User not exists");
@@ -108,14 +108,28 @@ class UserManager {
                     error: "ROOM_NOT_EXISTS",
                 };
             }
-            curUser.role = "ADMIN";
-            curUser.socket.send(JSON.stringify({
-                type: "ADMIN_CHANGED",
-                payload: {
-                    userId,
-                    role: user.role,
-                },
-            }));
+            if (user.role === "ADMIN") {
+                curUser.role = "ADMIN";
+                curUser.socket.send(JSON.stringify({
+                    type: "ADMIN_CHANGED",
+                    payload: {
+                        userId,
+                        role: user.role,
+                        maxSize: room.maxSize,
+                        size: room.socket.size,
+                    },
+                }));
+            }
+            else {
+                curUser.socket.send(JSON.stringify({
+                    type: "LEFT_CHAT",
+                    payload: {
+                        userId,
+                        role: user.role,
+                        size: room.socket.size,
+                    },
+                }));
+            }
         }
         if (room.socket.size == 0) {
             setTimeout(() => {
@@ -127,36 +141,6 @@ class UserManager {
         }
         return { ok: true, message: "ROOM_LEFT" };
     }
-    // broadcast(message: string, ws: WebSocket) {
-    // 	const userId = this.socketToUser.get(ws);
-    // 	if (!userId) {
-    // 		return { ok: false, error: "USER_NOT_FOUND" };
-    // 	}
-    // 	const roomId = this.users.get(userId)!.roomId;
-    // 	const room = this.rooms.get(roomId);
-    // 	const user = this.users.get(userId);
-    // 	if (!room || !user) {
-    // 		console.error("room not exist 2");
-    // 		return {
-    // 			ok: false,
-    // 			error: "ROOM_NOT_EXISTS",
-    // 		};
-    // 	}
-    // 	for (const s of room.socket) {
-    // 		if (s === ws) continue;
-    // 		s.send(
-    // 			JSON.stringify({
-    // 				type: "MESSAGE",
-    // 				payload: {
-    // 					userId,
-    // 					message,
-    // 				},
-    // 			}),
-    // 		);
-    // 	}
-    // 	console.log("message sent" + message);
-    // 	return { ok: true, message: "MESSAGE_SENT" };
-    // }
     broadcastMessage(payload, ws) {
         var _a;
         const userId = this.socketToUser.get(ws);
@@ -185,6 +169,7 @@ class UserManager {
                     userId,
                     message: payload.message,
                     replyTo: (_a = payload.replyTo) !== null && _a !== void 0 ? _a : null,
+                    sender: user.name,
                 },
             }));
         }

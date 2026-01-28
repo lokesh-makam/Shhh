@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { SocketContext } from "../context/SocketProvider";
 import { nanoid } from "nanoid";
 
@@ -12,6 +12,7 @@ type Chat = {
 		name: string;
 	};
 	me: boolean;
+	sender?: string;
 	replyTo?: {
 		id: string;
 		text?: string;
@@ -26,8 +27,8 @@ type Chat = {
 export default function Join() {
 	const { roomId } = useParams();
 	const ws = useContext(SocketContext);
-	const navigate = useNavigate();
-	const [maxSize, setMaxsize] = useState("2");
+	const [maxSize, setMaxsize] = useState(2);
+	const [size, setSize] = useState(2);
 	const [status, setStatus] = useState<"loading" | "joined" | "invalid">("loading");
 	const [message, setMessage] = useState("");
 	const [messages, setMessages] = useState<Chat[]>([]);
@@ -43,16 +44,19 @@ export default function Join() {
 		url: string;
 		type: string;
 	} | null>(null);
+	const [error, setError] = useState<string | null>(null);
 
 	const fileRef = useRef<HTMLInputElement>(null);
+	const inputRef = useRef<HTMLInputElement>(null);
 	const bottomRef = useRef<HTMLDivElement>(null);
 	const emojiPickerRef = useRef<HTMLDivElement>(null);
 	const lastMetaRef = useRef<{
 		fileType: string;
 		fileName: string;
+		sender?: string;
 	} | null>(null);
-	/* ---------------- AUTO SCROLL ---------------- */
 
+	/* ---------------- AUTO SCROLL ---------------- */
 	useEffect(() => {
 		bottomRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages]);
@@ -60,8 +64,10 @@ export default function Join() {
 	useEffect(() => {
 		if (!ws) return;
 		const handleClose = () => {
-			alert("Room ended");
-			window.location.href = "/";
+			setError("Room ended by admin");
+			setTimeout(() => {
+				window.location.href = "/";
+			}, 2000);
 		};
 		ws.addEventListener("close", handleClose);
 		return () => ws?.removeEventListener("close", handleClose);
@@ -69,12 +75,16 @@ export default function Join() {
 
 	useEffect(() => {
 		const esc = (e: KeyboardEvent) => {
-			if (e.key === "Escape") setPreviewMedia(null);
+			if (e.key === "Escape") {
+				setPreviewMedia(null);
+				setShowEmojiPicker(false);
+			}
 		};
 
 		window.addEventListener("keydown", esc);
 		return () => window.removeEventListener("keydown", esc);
 	}, []);
+
 	useEffect(() => {
 		if (previewMedia) {
 			document.body.style.overflow = "hidden";
@@ -86,6 +96,7 @@ export default function Join() {
 			document.body.style.overflow = "auto";
 		};
 	}, [previewMedia]);
+
 	/* ---------------- CLOSE EMOJI PICKER ON OUTSIDE CLICK ---------------- */
 	useEffect(() => {
 		function handleClickOutside(event: MouseEvent) {
@@ -117,63 +128,6 @@ export default function Join() {
 			}),
 		);
 
-		// const handler = (event: MessageEvent) => {
-		// 	const data = JSON.parse(event.data);
-		// 	if (typeof event.data === "string") {
-		// 		if (data.type === "JOINED_ROOM") {
-		// 			setRole(data.payload.role);
-		// 			setUsername(data.payload.name);
-		// 			console.log("ROLE FROM SERVER →", data.payload.role);
-		// 			console.log(role);
-		// 			setStatus("joined");
-		// 		}
-
-		// 		if (data.type === "JOIN_FAILED") setStatus("invalid");
-		// 		if (data.type === "ADMIN_CHANGED") {
-		// 			const curRole = data.payload.role;
-		// 			console.log(curRole);
-		// 			setRole(curRole);
-		// 		}
-		// 		if (data.type === "MESSAGE") {
-		// 			setMessages((prev) => [
-		// 				...prev,
-		// 				{
-		// 					id: nanoid(),
-		// 					text: data.payload.message,
-		// 					me: false,
-		// 				},
-		// 			]);
-		// 		}
-		// 		if (data.type === "MEDIA_META") {
-		// 			lastMetaRef.current = data.payload;
-		// 		}
-		// 		return;
-		// 	}
-		// 	const meta = lastMetaRef.current;
-		// 	if (!meta) return;
-
-		// 	const blob = new Blob([event.data], {
-		// 		type: meta.fileType,
-		// 	});
-
-		// 	const url = URL.createObjectURL(blob);
-
-		// 	setMessages((prev) => [
-		// 		...prev,
-		// 		{
-		// 			id: nanoid(),
-		// 			file: {
-		// 				url,
-		// 				type: meta.fileType,
-		// 				name: meta.fileName,
-		// 			},
-		// 			me: false,
-		// 		},
-		// 	]);
-
-		// 	lastMetaRef.current = null;
-		// };
-
 		const handler = (event: MessageEvent) => {
 			/* ---------- STRING (JSON) ---------- */
 			if (typeof event.data === "string") {
@@ -183,7 +137,7 @@ export default function Join() {
 					setRole(data.payload.role);
 					setUsername(data.payload.name);
 					setStatus("joined");
-					setMaxsize(data.payload.maxSize.toString());
+					setMaxsize(data.payload.maxSize);
 				}
 
 				if (data.type === "ERROR") {
@@ -192,6 +146,8 @@ export default function Join() {
 
 				if (data.type === "ADMIN_CHANGED") {
 					setRole(data.payload.role);
+					setMaxsize(data.payload.maxSize.toString());
+					setSize(data.payload.size.toString());
 				}
 
 				if (data.type === "MESSAGE") {
@@ -201,21 +157,27 @@ export default function Join() {
 							id: nanoid(),
 							text: data.payload.message,
 							replyTo: data.payload.replyTo ?? undefined,
+							sender: data.payload.sender,
 							me: false,
 						},
 					]);
 				}
+				if (data.type === "LEFT_CHAT") {
+					setSize(data.payload.size);
+				}
 
 				// ⭐ store meta
 				if (data.type === "MEDIA_META") {
-					lastMetaRef.current = data.payload;
+					lastMetaRef.current = {
+						...data.payload,
+						sender: data.payload.sender,
+					};
 				}
 
 				return;
 			}
 
 			/* ---------- BINARY (MEDIA) ---------- */
-
 			const meta = lastMetaRef.current;
 			if (!meta) return;
 
@@ -231,6 +193,7 @@ export default function Join() {
 						type: meta.fileType,
 						name: meta.fileName,
 					},
+					sender: meta.sender,
 					me: false,
 				},
 			]);
@@ -265,6 +228,7 @@ export default function Join() {
 			id: nanoid(),
 			text: message,
 			me: true,
+			sender: username,
 		};
 
 		if (replyingTo) {
@@ -279,105 +243,91 @@ export default function Join() {
 		setMessage("");
 		setReplyingTo(null);
 		setShowEmojiPicker(false);
+		inputRef.current?.focus();
 	}
 
 	function endChat() {
 		ws?.send(JSON.stringify({ type: "TERMINATE" }));
 		window.location.href = "/";
 	}
+
 	function leaveChat() {
 		window.location.href = "/";
 	}
 
 	/* ---------------- FILE UPLOAD ---------------- */
-	// async function handleFile(e: any) {
-	// 	const file = e.target.files[0];
-	// 	if (!file) return;
-
-	// 	setUploadingMedia(true);
-
-	// 	// Simulate upload delay
-	// 	await new Promise((resolve) => setTimeout(resolve, 1000));
-
-	// 	const url = URL.createObjectURL(file);
-
-	// 	const newMessage: Chat = {
-	// 		id: nanoid(),
-	// 		file: url,
-	// 		me: true,
-	// 	};
-
-	// 	if (replyingTo) {
-	// 		newMessage.replyTo = {
-	// 			id: replyingTo.id,
-	// 			text: replyingTo.text,
-	// 			file: replyingTo.file,
-	// 		};
-	// 	}
-
-	// 	setMessages((prev) => [...prev, newMessage]);
-	// 	setUploadingMedia(false);
-	// 	setReplyingTo(null);
-
-	// 	setTimeout(() => URL.revokeObjectURL(url), 60000);
-	// }
-
 	async function handleFile(e: any) {
 		const file = e.target.files[0];
 		if (!file || !ws) return;
 
 		setUploadingMedia(true);
 
-		// send meta first
-		ws.send(
-			JSON.stringify({
-				type: "MEDIA_META",
-				payload: {
-					fileName: file.name,
-					fileType: file.type,
+		try {
+			// send meta first
+			ws.send(
+				JSON.stringify({
+					type: "MEDIA_META",
+					payload: {
+						fileName: file.name,
+						fileType: file.type,
+					},
+				}),
+			);
+
+			// send binary
+			ws.send(file);
+
+			// local preview (same UI)
+			const url = URL.createObjectURL(file);
+
+			const newMessage: Chat = {
+				id: nanoid(),
+				file: {
+					url,
+					type: file.type,
+					name: file.name,
 				},
-			}),
-		);
+				me: true,
+				sender: username, // ⭐ ADD THIS
+			};
 
-		// send binary
-		ws.send(file);
+			setMessages((prev) => [...prev, newMessage]);
 
-		// local preview (same UI)
-		const url = URL.createObjectURL(file);
-
-		const newMessage: Chat = {
-			id: nanoid(),
-			file: {
-				url,
-				type: file.type,
-				name: file.name,
-			},
-			me: true,
-		};
-
-		setMessages((prev) => [...prev, newMessage]);
-
-		setUploadingMedia(false);
-
-		setTimeout(() => URL.revokeObjectURL(url), 60000);
+			setTimeout(() => URL.revokeObjectURL(url), 60000);
+		} catch (err) {
+			setError("Failed to upload media");
+			setTimeout(() => setError(null), 3000);
+		} finally {
+			setUploadingMedia(false);
+		}
 	}
+
 	/* ---------------- COPY ROOM ID ---------------- */
 	function copyRoomId() {
 		if (roomId) {
-			navigator.clipboard.writeText(roomId);
-			setCopied(true);
-			setTimeout(() => setCopied(false), 2000);
+			navigator.clipboard
+				.writeText(roomId)
+				.then(() => {
+					setCopied(true);
+					setTimeout(() => setCopied(false), 2000);
+				})
+				.catch(() => {
+					setError("Failed to copy room ID");
+					setTimeout(() => setError(null), 3000);
+				});
 		}
 	}
 
 	/* ---------------- EMOJI HANDLER ---------------- */
 	function addEmoji(emoji: string) {
 		setMessage((prev) => prev + emoji);
+		inputRef.current?.focus();
 	}
 
 	/* ---------------- REPLY HANDLER ---------------- */
 	function handleReply(msg: Chat) {
 		setReplyingTo(msg);
+		inputRef.current?.focus();
 	}
 
 	function cancelReply() {
@@ -414,311 +364,145 @@ export default function Join() {
 
 	/* ---------------- EMOJI CATEGORIES ---------------- */
 	const emojiCategories = {
-		"😊": [
-			"😀",
-			"😃",
-			"😄",
-			"😁",
-			"😅",
-			"😂",
-			"🤣",
-			"😊",
-			"😇",
-			"🙂",
-			"🙃",
-			"😉",
-			"😌",
-			"😍",
-			"🥰",
-			"😘",
-			"😗",
-			"😙",
-			"😚",
-			"😋",
-			"😛",
-			"😝",
-			"😜",
-			"🤪",
-			"🤨",
-			"🧐",
-			"🤓",
-			"😎",
-			"🤩",
-			"🥳",
-			"😏",
-			"😒",
-			"😞",
-			"😔",
-			"😟",
-			"😕",
-			"🙁",
-			"😣",
-			"😖",
-			"😫",
-			"😩",
-			"🥺",
-		],
-		"👋": [
-			"👋",
-			"🤚",
-			"🖐",
-			"✋",
-			"🖖",
-			"👌",
-			"🤌",
-			"🤏",
-			"✌️",
-			"🤞",
-			"🤟",
-			"🤘",
-			"🤙",
-			"👈",
-			"👉",
-			"👆",
-			"🖕",
-			"👇",
-			"☝️",
-			"👍",
-			"👎",
-			"✊",
-			"👊",
-			"🤛",
-			"🤜",
-			"👏",
-			"🙌",
-			"👐",
-			"🤲",
-			"🤝",
-			"🙏",
-		],
-		"❤️": ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❤️‍🔥", "❤️‍🩹", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟", "💌", "💋", "💏", "💑", "💐", "🌹", "🌷", "🌺", "🌸", "💮"],
-		"🐶": [
-			"🐶",
-			"🐱",
-			"🐭",
-			"🐹",
-			"🐰",
-			"🦊",
-			"🐻",
-			"🐼",
-			"🐨",
-			"🐯",
-			"🦁",
-			"🐮",
-			"🐷",
-			"🐸",
-			"🐵",
-			"🐔",
-			"🐧",
-			"🐦",
-			"🐤",
-			"🦆",
-			"🦅",
-			"🦉",
-			"🦇",
-			"🐺",
-			"🐗",
-			"🐴",
-			"🦄",
-			"🐝",
-			"🐛",
-			"🦋",
-			"🐌",
-			"🐞",
-			"🐜",
-			"🦟",
-			"🦗",
-		],
-		"🍎": [
-			"🍎",
-			"🍊",
-			"🍋",
-			"🍌",
-			"🍉",
-			"🍇",
-			"🍓",
-			"🫐",
-			"🍈",
-			"🍒",
-			"🍑",
-			"🥭",
-			"🍍",
-			"🥥",
-			"🥝",
-			"🍅",
-			"🍆",
-			"🥑",
-			"🥦",
-			"🥬",
-			"🥒",
-			"🌶",
-			"🫑",
-			"🌽",
-			"🥕",
-			"🫒",
-			"🧄",
-			"🧅",
-			"🥔",
-			"🍠",
-			"🥐",
-			"🥯",
-			"🍞",
-			"🥖",
-			"🥨",
-		],
-		"⚽": [
-			"⚽",
-			"🏀",
-			"🏈",
-			"⚾",
-			"🥎",
-			"🎾",
-			"🏐",
-			"🏉",
-			"🥏",
-			"🎱",
-			"🪀",
-			"🏓",
-			"🏸",
-			"🏒",
-			"🏑",
-			"🥍",
-			"🏏",
-			"🪃",
-			"🥅",
-			"⛳",
-			"🪁",
-			"🏹",
-			"🎣",
-			"🤿",
-			"🥊",
-			"🥋",
-			"🎽",
-			"🛹",
-			"🛼",
-			"🛷",
-			"⛸",
-			"🥌",
-		],
-		"🎮": ["🎮", "🕹", "🎲", "🎯", "🎳", "🎰", "🎨", "🎭", "🎪", "🎬", "🎤", "🎧", "🎼", "🎹", "🥁", "🎷", "🎺", "🎸", "🪕", "🎻", "🎬", "🎥", "📷", "📸", "📹", "📼", "🔍", "🔎", "💡", "🔦"],
-		"✈️": [
-			"✈️",
-			"🚀",
-			"🛸",
-			"🚁",
-			"🛶",
-			"⛵",
-			"🚤",
-			"🛥",
-			"🛳",
-			"⛴",
-			"🚢",
-			"🚂",
-			"🚃",
-			"🚄",
-			"🚅",
-			"🚆",
-			"🚇",
-			"🚈",
-			"🚉",
-			"🚊",
-			"🚝",
-			"🚞",
-			"🚋",
-			"🚌",
-			"🚍",
-			"🚎",
-			"🚐",
-			"🚑",
-			"🚒",
-			"🚓",
-			"🚔",
-			"🚕",
-		],
+		Smileys: ["😀", "😃", "😄", "😁", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋"],
+		Gestures: ["👋", "🤚", "🖐", "✋", "🖖", "👌", "🤌", "🤏", "✌️", "🤞", "🤟", "🤘", "🤙", "👈", "👉", "👆", "👇", "☝️", "👍", "👎"],
+		Hearts: ["❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❤️‍🔥", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟", "💌"],
+		Animals: ["🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔", "🐧", "🐦", "🐤", "🦆"],
+		Food: ["🍎", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🫐", "🍈", "🍒", "🍑", "🥭", "🍍", "🥥", "🥝", "🍅", "🍆", "🥑", "🥦", "🥬"],
+		Sports: ["⚽", "🏀", "🏈", "⚾", "🥎", "🎾", "🏐", "🏉", "🥏", "🎱", "🪀", "🏓", "🏸", "🏒", "🏑", "🥍", "🏏", "🪃", "🥅", "⛳"],
+		Activities: ["🎮", "🕹", "🎲", "🎯", "🎳", "🎰", "🎨", "🎭", "🎪", "🎬", "🎤", "🎧", "🎼", "🎹", "🥁", "🎷", "🎺", "🎸", "🪕", "🎻"],
+		Travel: ["✈️", "🚀", "🛸", "🚁", "🛶", "⛵", "🚤", "🛥", "🛳", "⛴", "🚢", "🚂", "🚃", "🚄", "🚅", "🚆", "🚇", "🚈", "🚉", "🚊"],
 	};
 
 	/* ---------------- STATES ---------------- */
 	if (status === "loading")
 		return (
 			<div className="h-screen flex items-center justify-center bg-black">
-				<div className="text-center space-y-4">
-					<div className="w-12 h-12 border-3 border-gray-700 border-t-white rounded-full animate-spin mx-auto"></div>
-					<p className="text-gray-400 text-sm">Connecting...</p>
+				<div className="text-center space-y-6">
+					<div className="relative w-20 h-20 mx-auto">
+						<div className="absolute inset-0 border-4 border-gray-800 rounded-full"></div>
+						<div className="absolute inset-0 border-4 border-transparent border-t-purple-500 border-r-pink-500 rounded-full animate-spin"></div>
+					</div>
+					<div className="space-y-2">
+						<p className="text-white text-lg font-semibold">Connecting to room</p>
+						<div className="flex items-center justify-center gap-1">
+							<div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: "0s" }}></div>
+							<div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
+							<div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: "0.4s" }}></div>
+						</div>
+					</div>
 				</div>
 			</div>
 		);
 
 	if (status === "invalid")
 		return (
-			<div className="h-screen flex items-center justify-center bg-black">
-				<div className="text-center space-y-4 p-6">
-					<div className="text-5xl">⚠️</div>
-					<p className="text-white text-lg font-medium">Room not found</p>
-					<p className="text-gray-500 text-sm">This room may have expired or doesn't exist</p>
-					<button onClick={() => navigate("/")} className="mt-4 px-6 py-2.5 bg-white text-black rounded-full font-semibold hover:bg-gray-200 transition">
-						Go Home
+			<div className="h-screen flex items-center justify-center bg-black p-4">
+				<div className="text-center space-y-6 max-w-md">
+					<div className="w-24 h-24 mx-auto rounded-full bg-gradient-to-br from-red-500/20 to-pink-500/20 flex items-center justify-center">
+						<svg className="w-12 h-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								strokeWidth={2}
+								d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+							/>
+						</svg>
+					</div>
+					<div className="space-y-2">
+						<h1 className="text-white text-2xl font-bold">Room Not Found</h1>
+						<p className="text-gray-400 text-sm leading-relaxed">This room may have expired, been deleted, or doesn't exist. Please check the room ID and try again.</p>
+					</div>
+					<button
+						onClick={() => (window.location.href = "/")}
+						className="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full font-semibold hover:from-purple-500 hover:to-pink-500 transition active:scale-95 shadow-lg"
+					>
+						Return Home
 					</button>
 				</div>
 			</div>
 		);
 
+	const isGroupChat = maxSize > 2;
+
 	/* ---------------- UI ---------------- */
 	return (
-		<div className="h-screen flex flex-col bg-black text-white overflow-hidden">
-			{/* HEADER - Instagram Style */}
-			<div className="flex-shrink-0 border-b border-gray-800">
-				<div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-					{/* Left - Back & User Info */}
-					<div className="flex items-center gap-3 flex-1 min-w-0">
-						<button onClick={() => leaveChat()} className="p-2 hover:bg-gray-900 rounded-full transition active:scale-95 flex-shrink-0" title="Leave Chat">
-							<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-							</svg>
-						</button>
-						<div className="flex items-center gap-3 min-w-0 flex-1">
+		<div className="flex flex-col bg-black text-white overflow-hidden h-[100dvh]">
+			{" "}
+			{/* ERROR TOAST */}
+			{error && (
+				<div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] animate-slideDown">
+					<div className="bg-red-500/90 backdrop-blur-md text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2">
+						<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+						<span className="text-sm font-medium">{error}</span>
+					</div>
+				</div>
+			)}
+			{/* HEADER */}
+			<div className="flex-shrink-0 border-b border-gray-800 bg-black">
+				<div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-2">
+					{/* Left - User Info */}
+					<div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
 							<div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-sm font-bold flex-shrink-0">
 								{username.charAt(0).toUpperCase()}
 							</div>
-							<div className="min-w-0 flex-1">
-								<p className="text-sm font-semibold truncate">{username}</p>
-								<div className="flex items-center gap-2 text-xs text-gray-500">
-									<span className="truncate">ID: {roomId?.slice(0, 8)}...</span>
-									<button onClick={copyRoomId} className="flex-shrink-0 hover:text-gray-400 transition" title="Copy Room ID">
-										{copied ? (
-											<svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-											</svg>
-										) : (
-											<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path
-													strokeLinecap="round"
-													strokeLinejoin="round"
-													strokeWidth={2}
-													d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-												/>
-											</svg>
-										)}
-									</button>
-								</div>
+						{/* {!isGroupChat && (
+						)} */}
+						<div className="min-w-0 flex-1">
+							<p className="text-sm font-semibold truncate">{`${username}`}</p>
+							<div className="flex items-center gap-2 text-xs text-gray-500">
+								<span className="truncate">ID: {roomId?.slice(0, 8)}...</span>
+								<button onClick={copyRoomId} className="flex-shrink-0 hover:text-gray-400 transition active:scale-95" title="Copy Room ID">
+									{copied ? (
+										<svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+										</svg>
+									) : (
+										<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												strokeLinecap="round"
+												strokeLinejoin="round"
+												strokeWidth={2}
+												d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+											/>
+										</svg>
+									)}
+								</button>
 							</div>
 						</div>
 					</div>
 
-					{/* Right - End Chat for Admin */}
-					{role === "ADMIN" && (
+					{/* Right - Action Buttons */}
+					<div className="flex items-center gap-2 flex-shrink-0">
 						<button
-							onClick={endChat}
-							className="px-4 py-1.5 text-xs font-semibold rounded-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition active:scale-95 flex-shrink-0"
+							onClick={leaveChat}
+							className="px-3 sm:px-4 py-1.5 text-xs font-semibold rounded-full bg-gray-900 hover:bg-gray-800 border border-gray-700 transition active:scale-95 flex items-center gap-1.5"
 						>
-							End Chat
+							<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+							</svg>
+							<span className="hidden sm:inline">Leave</span>
 						</button>
-					)}
+						{role === "ADMIN" && (
+							<button
+								onClick={endChat}
+								className="px-3 sm:px-4 py-1.5 text-xs font-semibold rounded-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition active:scale-95 flex items-center gap-1.5"
+							>
+								<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+								</svg>
+								<span className="hidden sm:inline">End</span>
+							</button>
+						)}
+					</div>
 				</div>
 			</div>
-
-			{/* MESSAGES AREA - Instagram Style */}
-			<div className="flex-1 overflow-y-auto">
-				<div className="max-w-4xl mx-auto px-4 py-4 space-y-2">
+			{/* MESSAGES AREA */}
+			<div className="flex-1 overflow-y-auto pb-2">
+				{" "}
+				<div className="max-w-4xl mx-auto px-3 sm:px-4 py-4 space-y-2">
 					{messages.length === 0 && (
 						<div className="flex flex-col items-center justify-center h-full text-gray-600 py-20">
 							<div className="w-20 h-20 rounded-full border-4 border-gray-800 flex items-center justify-center text-3xl mb-4">💬</div>
@@ -727,85 +511,49 @@ export default function Join() {
 						</div>
 					)}
 
-					{messages.map((m, idx) => {
-						const showAvatar = idx === messages.length - 1 || messages[idx + 1]?.me !== m.me;
-
+					{messages.map((m) => {
 						return (
-							<div
-								key={m.id}
-								className={`group flex gap-2 items-end ${m.me ? "flex-row-reverse" : "flex-row"} animate-messageIn`}
-								onDoubleClick={() => handleDoubleClick(m)}
-								onTouchStart={(e) => handleTouchStart(e, m.id)}
-								onTouchMove={(e) => handleTouchMove(e, m)}
-								onTouchEnd={handleTouchEnd}
-							>
-								{/* Avatar for received messages */}
+							<div key={m.id} className={`flex gap-2 items-end ${m.me ? "flex-row-reverse" : "flex-row"} animate-messageIn`}>
+								{/* Avatar */}
 								{!m.me && (
-									<div
-										className={`w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold flex-shrink-0 ${showAvatar ? "visible" : "invisible"}`}
-									>
-										{username.charAt(0).toUpperCase()}
+									<div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold">
+										{m.sender?.charAt(0).toUpperCase()}
 									</div>
 								)}
 
-								{/* Message Bubble */}
-								<div className={`max-w-[70%] sm:max-w-md ${m.me ? "items-end" : "items-start"} flex flex-col gap-0.5 relative`}>
-									{/* Reply Icon (Web only - shows on hover) */}
-									<button
-										onClick={() => handleReply(m)}
-										className={`hidden sm:block absolute top-1/2 -translate-y-1/2 ${m.me ? "-left-8" : "-right-8"} p-1.5 bg-gray-900 rounded-full opacity-0 group-hover:opacity-100 transition`}
-									>
-										<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-										</svg>
-									</button>
+								<div className={`max-w-[75%] sm:max-w-md flex flex-col ${m.me ? "items-end" : "items-start"}`}>
+									{/* ✅ ALWAYS SHOW NAME */}
+									{isGroupChat && m.sender && !m.me && <span className={`text-xs mb-1 font-medium px-1 ${m.me ? "text-purple-300 text-right" : "text-gray-400"}`}>{m.sender}</span>}
 
-									<div
-										className={`px-4 py-2 rounded-3xl text-sm break-words ${
-											m.me ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-br-md" : "bg-gray-900 text-white rounded-bl-md"
-										}`}
-									>
-										{/* Reply Preview */}
-										{m.replyTo && (
-											<div className={`mb-2 pb-2 border-l-2 pl-2 text-xs opacity-70 ${m.me ? "border-white/30" : "border-gray-700"}`}>
-												{m.replyTo.text && <p className="italic">{m.replyTo.text}</p>}
-												{m.replyTo.file && <p className="italic">📷 Photo</p>}
-											</div>
+									{/* Bubble */}
+									<div className={`px-3 sm:px-4 py-2 rounded-2xl text-sm break-words ${m.me ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white" : "bg-gray-900 text-white"}`}>
+										{m.text && <span>{m.text}</span>}
+
+										{m.file && m.file.type.startsWith("image") && (
+											<img
+												src={m.file.url}
+												className="rounded-2xl w-full max-h-80 object-cover cursor-pointer"
+												onClick={() =>
+													setPreviewMedia({
+														url: m.file!.url,
+														type: m.file!.type,
+													})
+												}
+												draggable={false}
+												onContextMenu={(e) => e.preventDefault()}
+												alt="shared media"
+											/>
 										)}
 
-										{m.text && <span>{m.text}</span>}
-										{m.file && (
-											<>
-												{m.file.type.startsWith("image") && (
-													<img
-														src={m.file.url}
-														onClick={() =>
-															setPreviewMedia({
-																url: m.file!.url,
-																type: m.file!.type,
-															})
-														}
-														className="rounded-2xl max-h-80 w-full object-cover cursor-pointer hover:opacity-95 transition"
-														alt="shared media"
-													/>
-												)}
-
-												{m.file.type.startsWith("video") && (
-													<video
-														src={m.file.url}
-														controls
-														onClick={() =>
-															setPreviewMedia({
-																url: m.file!.url,
-																type: m.file!.type,
-															})
-														}
-														className="rounded-2xl max-h-80 w-full cursor-pointer"
-													/>
-												)}
-
-												{m.file.type.startsWith("audio") && <audio src={m.file.url} controls />}
-											</>
+										{m.file && m.file.type.startsWith("video") && (
+											<video
+												src={m.file.url}
+												controls
+												controlsList="nodownload noplaybackrate noremoteplayback"
+												disablePictureInPicture
+												onContextMenu={(e) => e.preventDefault()}
+												className="rounded-2xl max-h-64 w-full object-contain mt-1"
+											/>
 										)}
 									</div>
 								</div>
@@ -815,30 +563,35 @@ export default function Join() {
 					<div ref={bottomRef} />
 				</div>
 			</div>
-
-			{/* EMOJI PICKER - Modern Design */}
+			{/* EMOJI PICKER */}
 			{showEmojiPicker && (
 				<div
 					ref={emojiPickerRef}
-					className="absolute bottom-16 sm:bottom-20 left-4 right-4 sm:left-auto sm:right-auto sm:w-96 bg-[#1c1c1e] border border-gray-800 rounded-3xl shadow-2xl overflow-hidden z-50 animate-slideUp"
-					style={{ maxWidth: "calc(100vw - 32px)" }}
+					className="absolute bottom-14 sm:bottom-20 left-2 right-2 sm:left-4 sm:right-auto sm:w-80 md:w-96 bg-[#1c1c1e] border border-gray-800 rounded-3xl shadow-2xl overflow-hidden z-50 animate-slideUp max-h-96"
 				>
-					<div className="p-4 border-b border-gray-800 flex items-center justify-between">
+					<div className="sticky top-0 bg-[#1c1c1e] p-3 border-b border-gray-800 flex items-center justify-between z-10">
 						<h3 className="text-sm font-semibold">Emojis</h3>
-						<button onClick={() => setShowEmojiPicker(false)} className="p-1.5 hover:bg-gray-800 rounded-full transition">
+						<button onClick={() => setShowEmojiPicker(false)} className="p-1.5 hover:bg-gray-800 rounded-full transition active:scale-95">
 							<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
 							</svg>
 						</button>
 					</div>
 
-					<div className="h-80 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-						{Object.entries(emojiCategories).map(([icon, emojis]) => (
-							<div key={icon}>
-								<p className="text-2xl mb-2">{icon}</p>
+					<div className="overflow-y-auto p-3 space-y-4 custom-scrollbar" style={{ maxHeight: "20rem" }}>
+						{Object.entries(emojiCategories).map(([category, emojis]) => (
+							<div key={category}>
+								<p className="text-xs text-gray-500 font-semibold mb-2 sticky top-0 bg-[#1c1c1e] py-1">{category}</p>
 								<div className="grid grid-cols-8 gap-1">
 									{emojis.map((emoji, idx) => (
-										<button key={idx} onClick={() => addEmoji(emoji)} className="text-2xl p-2 hover:bg-gray-800 rounded-lg transition active:scale-90">
+										<button
+											key={idx}
+											onClick={() => {
+												addEmoji(emoji);
+												setShowEmojiPicker(false);
+											}}
+											className="text-2xl p-2 hover:bg-gray-800 rounded-lg transition active:scale-90"
+										>
 											{emoji}
 										</button>
 									))}
@@ -848,21 +601,20 @@ export default function Join() {
 					</div>
 				</div>
 			)}
-
 			{/* REPLY BAR */}
 			{replyingTo && (
-				<div className="border-t border-gray-800 bg-gray-900/50">
-					<div className="max-w-4xl mx-auto px-4 py-2 flex items-center justify-between">
+				<div className="border-t border-gray-800 bg-gray-900/50 flex-shrink-0">
+					<div className="max-w-4xl mx-auto px-3 sm:px-4 py-2 flex items-center justify-between">
 						<div className="flex items-center gap-2 flex-1 min-w-0">
 							<svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
 							</svg>
 							<div className="min-w-0 flex-1">
-								<p className="text-xs text-gray-500">Replying to {replyingTo.me ? "yourself" : username}</p>
-								<p className="text-sm text-gray-300 truncate">{replyingTo.text || "📷 Photo"}</p>
+								<p className="text-xs text-gray-500">Replying to {replyingTo.me ? "yourself" : replyingTo.sender || username}</p>
+								<p className="text-sm text-gray-300 truncate">{replyingTo.text || "📷 Media"}</p>
 							</div>
 						</div>
-						<button onClick={cancelReply} className="p-1 hover:bg-gray-800 rounded-full transition flex-shrink-0">
+						<button onClick={cancelReply} className="p-1 hover:bg-gray-800 rounded-full transition flex-shrink-0 active:scale-95">
 							<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
 							</svg>
@@ -870,24 +622,35 @@ export default function Join() {
 					</div>
 				</div>
 			)}
+			{/* INPUT BAR */}
+			<div className="flex-shrink-0 border-t border-gray-800 bg-black">
+				<div className="max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-3">
+					<div className="flex items-center gap-1 sm:gap-2">
+						{/* Message Input */}
+						<div className="flex-1 relative order-2">
+							<input
+								ref={inputRef}
+								value={message}
+								onChange={(e) => setMessage(e.target.value)}
+								onKeyDown={(e) => e.key === "Enter" && broadcast()}
+								placeholder="Message..."
+								className="w-full px-3 sm:px-4 py-2 sm:py-2.5 rounded-full bg-gray-900 border border-gray-800 focus:outline-none focus:border-gray-700 text-sm transition placeholder-gray-600"
+							/>
+						</div>
 
-			{/* INPUT BAR - Instagram Style */}
-			<div className="flex-shrink-0 border-t border-gray-800">
-				<div className="max-w-4xl mx-auto px-4 py-3">
-					<div className="flex items-center gap-2">
-						{/* Emoji Button */}
-						<button onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 hover:bg-gray-900 rounded-full transition active:scale-95 flex-shrink-0">
-							<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						{/* Emoji Button (Left on Mobile) */}
+						<button onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="p-2 hover:bg-gray-900 rounded-full transition active:scale-95 flex-shrink-0 order-1">
+							<svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 							</svg>
 						</button>
 
-						{/* Attach Button */}
-						<button onClick={() => fileRef.current?.click()} className="p-2 hover:bg-gray-900 rounded-full transition active:scale-95 flex-shrink-0" disabled={uploadingMedia}>
+						{/* Attach Button (Right on Mobile) */}
+						<button onClick={() => fileRef.current?.click()} className="p-2 hover:bg-gray-900 rounded-full transition active:scale-95 flex-shrink-0 order-3" disabled={uploadingMedia}>
 							{uploadingMedia ? (
-								<div className="w-6 h-6 border-2 border-gray-600 border-t-white rounded-full animate-spin"></div>
+								<div className="w-5 h-5 sm:w-6 sm:h-6 border-2 border-gray-600 border-t-white rounded-full animate-spin"></div>
 							) : (
-								<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
 										strokeLinecap="round"
 										strokeLinejoin="round"
@@ -900,33 +663,21 @@ export default function Join() {
 
 						<input ref={fileRef} type="file" className="hidden" onChange={handleFile} accept="image/*,video/*,audio/*" />
 
-						{/* Message Input */}
-						<div className="flex-1 relative">
-							<input
-								value={message}
-								onChange={(e) => setMessage(e.target.value)}
-								onKeyDown={(e) => e.key === "Enter" && broadcast()}
-								placeholder="Message..."
-								className="w-full px-4 py-2.5 rounded-full bg-gray-900 border border-gray-800 focus:outline-none focus:border-gray-700 text-sm transition placeholder-gray-600"
-							/>
-						</div>
-
-						{/* Send Button - Dynamic Icon */}
+						{/* Send Button */}
 						<button
 							onClick={broadcast}
-							className={`p-2.5 rounded-full transition active:scale-95 flex-shrink-0 ${
+							className={`p-2 sm:p-2.5 rounded-full transition active:scale-95 flex-shrink-0 order-4 ${
 								message.trim() ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500" : "bg-transparent opacity-40"
 							}`}
 							disabled={!message.trim()}
 						>
-							<svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+							<svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
 								<path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
 							</svg>
 						</button>
 					</div>
 				</div>
 			</div>
-
 			<style>{`
 				/* Message In Animation */
 				@keyframes messageIn {
@@ -960,9 +711,25 @@ export default function Join() {
 					animation: slideUp 0.2s ease-out;
 				}
 
+				/* Slide Down Animation */
+				@keyframes slideDown {
+					from {
+						opacity: 0;
+						transform: translate(-50%, -20px);
+					}
+					to {
+						opacity: 1;
+						transform: translate(-50%, 0);
+					}
+				}
+
+				.animate-slideDown {
+					animation: slideDown 0.3s ease-out;
+				}
+
 				/* Custom Scrollbar */
 				.custom-scrollbar::-webkit-scrollbar {
-					width: 8px;
+					width: 6px;
 				}
 
 				.custom-scrollbar::-webkit-scrollbar-track {
@@ -971,39 +738,44 @@ export default function Join() {
 
 				.custom-scrollbar::-webkit-scrollbar-thumb {
 					background: #3a3a3c;
-					border-radius: 4px;
+					border-radius: 3px;
 				}
 
 				.custom-scrollbar::-webkit-scrollbar-thumb:hover {
 					background: #48484a;
 				}
+
+				/* Prevent text selection during drag */
+				.select-none {
+					user-select: none;
+					-webkit-user-select: none;
+				}
 			`}</style>
+			{/* MEDIA PREVIEW MODAL */}
 			{previewMedia && (
-				<div className="fixed inset-0 bg-black z-[9999] flex flex-col" style={{ height: "100dvh" }} onClick={() => setPreviewMedia(null)}>
-					{/* ---------- TOP BAR ---------- */}
-					<div className="flex items-center justify-between p-4 bg-black/60 backdrop-blur-md">
-						{/* MOBILE BACK BUTTON */}
-						<button onClick={() => setPreviewMedia(null)} className="p-2 active:scale-95">
+				<div className="fixed inset-0 z-[9999] bg-black" style={{ height: "100dvh", width: "100vw" }} onClick={() => setPreviewMedia(null)}>
+					<div className="absolute inset-0 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+						<button onClick={() => setPreviewMedia(null)} className="absolute top-4 left-4 p-2 rounded-full bg-black/60 active:scale-95 z-10">
+							{" "}
 							<svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
 							</svg>
 						</button>
+						{previewMedia.type.startsWith("image") && (
+							<img src={previewMedia.url} draggable={false} onContextMenu={(e) => e.preventDefault()} className="w-full h-full object-contain select-none" />
+						)}
 
-						<span className="text-white text-sm font-medium">Preview</span>
-
-						{/* DESKTOP CLOSE */}
-						<button onClick={() => setPreviewMedia(null)} className="hidden sm:block text-white text-2xl font-bold hover:opacity-70">
-							✕
-						</button>
-					</div>
-
-					{/* ---------- MEDIA AREA ---------- */}
-					<div className="flex-1 flex items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
-						{previewMedia.type.startsWith("image") && <img src={previewMedia.url} className="max-h-full max-w-full object-contain rounded-lg" />}
-
-						{previewMedia.type.startsWith("video") && <video src={previewMedia.url} controls autoPlay className="max-h-full max-w-full rounded-lg" />}
-
-						{previewMedia.type.startsWith("audio") && <audio src={previewMedia.url} controls autoPlay />}
+						{previewMedia.type.startsWith("video") && (
+							<video
+								src={previewMedia.url}
+								autoPlay
+								controls
+								controlsList="nodownload noplaybackrate noremoteplayback"
+								disablePictureInPicture
+								onContextMenu={(e) => e.preventDefault()}
+								className="w-full h-full object-cover"
+							/>
+						)}
 					</div>
 				</div>
 			)}

@@ -26,6 +26,7 @@ function sendError(ws, message) {
     }));
 }
 wss.on("connection", (ws) => {
+    console.log("client connected");
     ws.on("error", (err) => {
         console.error("Socket error:", err.message);
         ws.terminate();

@@ -28,6 +28,7 @@ function sendError(ws: WebSocket, message: string) {
 }
 
 wss.on("connection", (ws: WebSocket) => {
+	console.log("client connected");
 	ws.on("error", (err) => {
 		console.error("Socket error:", err.message);
 		ws.terminate();
