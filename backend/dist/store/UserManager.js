@@ -80,6 +80,7 @@ class UserManager {
             roomId,
             role,
             name: (_a = this.users.get(userId)) === null || _a === void 0 ? void 0 : _a.name,
+            maxSize: room.maxSize,
         };
     }
     leaveChat(roomId, userId) {
@@ -126,15 +127,49 @@ class UserManager {
         }
         return { ok: true, message: "ROOM_LEFT" };
     }
-    broadcast(message, ws) {
+    // broadcast(message: string, ws: WebSocket) {
+    // 	const userId = this.socketToUser.get(ws);
+    // 	if (!userId) {
+    // 		return { ok: false, error: "USER_NOT_FOUND" };
+    // 	}
+    // 	const roomId = this.users.get(userId)!.roomId;
+    // 	const room = this.rooms.get(roomId);
+    // 	const user = this.users.get(userId);
+    // 	if (!room || !user) {
+    // 		console.error("room not exist 2");
+    // 		return {
+    // 			ok: false,
+    // 			error: "ROOM_NOT_EXISTS",
+    // 		};
+    // 	}
+    // 	for (const s of room.socket) {
+    // 		if (s === ws) continue;
+    // 		s.send(
+    // 			JSON.stringify({
+    // 				type: "MESSAGE",
+    // 				payload: {
+    // 					userId,
+    // 					message,
+    // 				},
+    // 			}),
+    // 		);
+    // 	}
+    // 	console.log("message sent" + message);
+    // 	return { ok: true, message: "MESSAGE_SENT" };
+    // }
+    broadcastMessage(payload, ws) {
+        var _a;
         const userId = this.socketToUser.get(ws);
         if (!userId) {
-            return { ok: false, error: "USER_NOT_FOUND" };
+            console.error("room not exist 2");
+            return {
+                ok: false,
+                error: "ROOM_NOT_EXISTS",
+            };
         }
-        const roomId = this.users.get(userId).roomId;
-        const room = this.rooms.get(roomId);
         const user = this.users.get(userId);
-        if (!room || !user) {
+        const room = this.rooms.get(user.roomId);
+        if (!room) {
             console.error("room not exist 2");
             return {
                 ok: false,
@@ -148,11 +183,11 @@ class UserManager {
                 type: "MESSAGE",
                 payload: {
                     userId,
-                    message,
+                    message: payload.message,
+                    replyTo: (_a = payload.replyTo) !== null && _a !== void 0 ? _a : null,
                 },
             }));
         }
-        console.log("message sent" + message);
         return { ok: true, message: "MESSAGE_SENT" };
     }
     broadcastBinary(msg, ws) {

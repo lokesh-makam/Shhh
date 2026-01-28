@@ -155,34 +155,70 @@ export class UserManager {
 		return { ok: true, message: "ROOM_LEFT" };
 	}
 
-	broadcast(message: string, ws: WebSocket) {
+	// broadcast(message: string, ws: WebSocket) {
+	// 	const userId = this.socketToUser.get(ws);
+	// 	if (!userId) {
+	// 		return { ok: false, error: "USER_NOT_FOUND" };
+	// 	}
+	// 	const roomId = this.users.get(userId)!.roomId;
+	// 	const room = this.rooms.get(roomId);
+	// 	const user = this.users.get(userId);
+	// 	if (!room || !user) {
+	// 		console.error("room not exist 2");
+	// 		return {
+	// 			ok: false,
+	// 			error: "ROOM_NOT_EXISTS",
+	// 		};
+	// 	}
+	// 	for (const s of room.socket) {
+	// 		if (s === ws) continue;
+	// 		s.send(
+	// 			JSON.stringify({
+	// 				type: "MESSAGE",
+	// 				payload: {
+	// 					userId,
+	// 					message,
+	// 				},
+	// 			}),
+	// 		);
+	// 	}
+	// 	console.log("message sent" + message);
+	// 	return { ok: true, message: "MESSAGE_SENT" };
+	// }
+	broadcastMessage(payload: any, ws: WebSocket) {
 		const userId = this.socketToUser.get(ws);
 		if (!userId) {
-			return { ok: false, error: "USER_NOT_FOUND" };
-		}
-		const roomId = this.users.get(userId)!.roomId;
-		const room = this.rooms.get(roomId);
-		const user = this.users.get(userId);
-		if (!room || !user) {
 			console.error("room not exist 2");
 			return {
 				ok: false,
 				error: "ROOM_NOT_EXISTS",
 			};
 		}
+
+		const user = this.users.get(userId)!;
+		const room = this.rooms.get(user.roomId);
+		if (!room) {
+			console.error("room not exist 2");
+			return {
+				ok: false,
+				error: "ROOM_NOT_EXISTS",
+			};
+		}
+
 		for (const s of room.socket) {
 			if (s === ws) continue;
+
 			s.send(
 				JSON.stringify({
 					type: "MESSAGE",
 					payload: {
 						userId,
-						message,
+						message: payload.message,
+						replyTo: payload.replyTo ?? null,
 					},
 				}),
 			);
 		}
-		console.log("message sent" + message);
 		return { ok: true, message: "MESSAGE_SENT" };
 	}
 	broadcastBinary(msg: WebSocket.RawData, ws: WebSocket) {

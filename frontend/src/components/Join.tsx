@@ -200,6 +200,7 @@ export default function Join() {
 						{
 							id: nanoid(),
 							text: data.payload.message,
+							replyTo: data.payload.replyTo ?? undefined,
 							me: false,
 						},
 					]);
@@ -247,7 +248,16 @@ export default function Join() {
 		ws?.send(
 			JSON.stringify({
 				type: "SEND_MESSAGE",
-				payload: { message },
+				payload: {
+					message,
+					replyTo: replyingTo
+						? {
+								id: replyingTo.id,
+								text: replyingTo.text,
+								file: replyingTo.file,
+							}
+						: null,
+				},
 			}),
 		);
 

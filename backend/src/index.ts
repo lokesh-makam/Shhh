@@ -76,7 +76,7 @@ wss.on("connection", (ws: WebSocket) => {
 				);
 			}
 			if (type === "SEND_MESSAGE") {
-				const result = userManager.broadcast(payload.message, ws);
+				const result = userManager.broadcastMessage(payload, ws);
 				if (!result.ok) {
 					sendError(ws, result.error!);
 					return;
