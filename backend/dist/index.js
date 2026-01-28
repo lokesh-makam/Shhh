@@ -13,7 +13,10 @@ app.get("/", (req, res) => {
     res.send("Server running");
 });
 const server = http_1.default.createServer(app);
-const wss = new ws_1.WebSocketServer({ server });
+const wss = new ws_1.WebSocketServer({
+    server,
+    maxPayload: 50 * 1024 * 1024,
+});
 function sendError(ws, message) {
     ws.send(JSON.stringify({
         type: "ERROR",
@@ -24,7 +27,11 @@ function sendError(ws, message) {
 }
 wss.on("connection", (ws) => {
     console.log("Client connected");
-    ws.on("message", (msg) => {
+    ws.on("message", (msg, isBinary) => {
+        if (isBinary) {
+            userManager.broadcastBinary(msg, ws);
+            return;
+        }
         const data = JSON.parse(msg.toString());
         const type = data.type;
         const payload = data.payload;
@@ -63,13 +70,16 @@ wss.on("connection", (ws) => {
                 sendError(ws, result.error);
                 return;
             }
-            ws.send(JSON.stringify({
-                type: "MESSAGE_SENT",
-                payload: {},
-            }));
         }
         if (type == "TERMINATE") {
             const result = userManager.terminate(ws);
+            if (!result.ok) {
+                sendError(ws, result.error);
+                return;
+            }
+        }
+        if (type === "MEDIA_META") {
+            const result = userManager.broadcastRaw(JSON.stringify(data), ws);
             if (!result.ok) {
                 sendError(ws, result.error);
                 return;
@@ -81,6 +91,6 @@ wss.on("connection", (ws) => {
         console.log("Client disconnected");
     });
 });
-server.listen(8080, () => {
+server.listen(8080, "0.0.0.0", () => {
     console.log("Server running on port 8080");
 });

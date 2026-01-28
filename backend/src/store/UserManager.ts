@@ -18,6 +18,7 @@ export interface User {
 
 interface Room {
 	socket: Set<WebSocket>;
+	joinOrder: string[];
 	maxSize: number;
 }
 
@@ -60,6 +61,7 @@ export class UserManager {
 		}
 		this.rooms.set(roomId, {
 			socket: new Set(),
+			joinOrder: [],
 			maxSize,
 		});
 
@@ -85,8 +87,9 @@ export class UserManager {
 				error: "INVALID_ROOM_SIZE",
 			};
 		}
-		const role = room.socket.size == 0 ? "ADMIN" : "USER";
+		const role = room.joinOrder.length == 0 ? "ADMIN" : "USER";
 		room.socket.add(socket);
+		room.joinOrder.push(userId);
 		this.users.set(userId, {
 			userId,
 			name: "lokesh",
@@ -100,6 +103,7 @@ export class UserManager {
 			roomId,
 			role,
 			name: this.users.get(userId)?.name,
+			maxSize: room.maxSize,
 		};
 	}
 
@@ -113,12 +117,33 @@ export class UserManager {
 				error: "ROOM_NOT_EXISTS",
 			};
 		}
+		room.joinOrder = room.joinOrder.filter((id) => id != userId);
 		room.socket.delete(user.socket);
 		this.socketToUser.delete(user.socket);
 		this.users.delete(userId);
+
 		console.log("user left the chat..");
 		console.log("No of players present in the chat are " + room.socket.size);
-
+		if (user.role === "ADMIN" && room.joinOrder.length > 0) {
+			const curUser = this.users.get(room.joinOrder[0]);
+			if (!curUser) {
+				console.log("room or User not exists");
+				return {
+					ok: false,
+					error: "ROOM_NOT_EXISTS",
+				};
+			}
+			curUser.role = "ADMIN";
+			curUser.socket.send(
+				JSON.stringify({
+					type: "ADMIN_CHANGED",
+					payload: {
+						userId,
+						role: user.role,
+					},
+				}),
+			);
+		}
 		if (room.socket.size == 0) {
 			setTimeout(() => {
 				if (room.socket.size == 0) {
@@ -160,6 +185,48 @@ export class UserManager {
 		console.log("message sent" + message);
 		return { ok: true, message: "MESSAGE_SENT" };
 	}
+	broadcastBinary(msg: WebSocket.RawData, ws: WebSocket) {
+		const userId = this.socketToUser.get(ws);
+		if (!userId) {
+			return { ok: false, error: "USER_NOT_FOUND" };
+		}
+		const roomId = this.users.get(userId)!.roomId;
+		const room = this.rooms.get(roomId);
+		if (!room) {
+			return {
+				ok: false,
+				error: "ROOM_NOT_EXISTS",
+			};
+		}
+		for (const s of room.socket) {
+			if (s === ws) continue;
+			s.send(msg, { binary: true });
+		}
+		return { ok: true, message: "MESSAGE_SENT" };
+	}
+
+	broadcastRaw(json: string, ws: WebSocket) {
+		const userId = this.socketToUser.get(ws);
+		if (!userId) {
+			return { ok: false, error: "USER_NOT_FOUND" };
+		}
+
+		const roomId = this.users.get(userId)!.roomId;
+		const room = this.rooms.get(roomId);
+		if (!room) {
+			return {
+				ok: false,
+				error: "ROOM_NOT_EXISTS",
+			};
+		}
+
+		for (const s of room.socket) {
+			if (s === ws) continue;
+			s.send(json);
+		}
+		return { ok: true, message: "MESSAGE_SENT" };
+	}
+
 	terminate(ws: WebSocket) {
 		const userId = this.socketToUser.get(ws);
 		if (!userId) {
