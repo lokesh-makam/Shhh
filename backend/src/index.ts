@@ -6,7 +6,8 @@ import { UserManager } from "./store/UserManager";
 const app = express();
 const userManager = new UserManager();
 const server = http.createServer(app);
-
+const PORT = process.env.PORT || 3000;
+server.listen(PORT);
 const wss = new WebSocketServer({
 	server,
 	maxPayload: 50 * 1024 * 1024,
@@ -103,4 +104,6 @@ wss.on("connection", (ws: WebSocket) => {
 	});
 });
 
-server.listen(8080);
+server.listen(PORT, () => {
+	console.log(`Server running on ${PORT}`);
+});
