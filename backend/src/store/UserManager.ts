@@ -81,7 +81,6 @@ export class UserManager {
 			};
 		}
 		if (room.maxSize <= room.socket.size) {
-			console.log("room is full");
 			return {
 				ok: false,
 				error: "INVALID_ROOM_SIZE",
@@ -103,7 +102,7 @@ export class UserManager {
 			roomId,
 			role,
 			name: this.users.get(userId)?.name,
-			maxSize: room.socket.size,
+			maxSize: room.maxSize,
 		};
 	}
 
@@ -111,7 +110,6 @@ export class UserManager {
 		const room = this.getRoom(roomId);
 		const user = this.users.get(userId);
 		if (!room || !user) {
-			console.log("room or User not exists");
 			return {
 				ok: false,
 				error: "ROOM_NOT_EXISTS",
@@ -122,14 +120,10 @@ export class UserManager {
 		this.socketToUser.delete(user.socket);
 		this.users.delete(userId);
 
-		console.log("user left the chat..");
-		console.log("No of players present in the chat are " + room.socket.size);
-
 		if (user.role === "ADMIN" || room.joinOrder.length > 0) {
 			const curUser = this.users.get(room.joinOrder[0]);
 
 			if (!curUser) {
-				console.log("room or User not exists");
 				return {
 					ok: false,
 					error: "ROOM_NOT_EXISTS",
@@ -152,7 +146,6 @@ export class UserManager {
 			setTimeout(() => {
 				if (room.socket.size == 0) {
 					this.rooms.delete(roomId);
-					console.log("no users present room deleted");
 				}
 			}, 10000);
 		}
@@ -281,8 +274,6 @@ export class UserManager {
 	handleDisconnect(ws: WebSocket) {
 		const userId = this.socketToUser.get(ws);
 		if (!userId) {
-			console.log("room not exist 4");
-
 			return {
 				ok: false,
 				error: "USER_NOT_FOUND",
@@ -291,8 +282,6 @@ export class UserManager {
 
 		const user = this.users.get(userId);
 		if (!user) {
-			console.log("room not exist 5");
-
 			return {
 				ok: false,
 				error: "USER_NOT_FOUND",

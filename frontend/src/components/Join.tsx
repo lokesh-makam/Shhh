@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { SocketContext } from "../context/SocketProvider";
 import { nanoid } from "nanoid";
+import toast from "react-hot-toast";
 
 type Chat = {
 	id: string;
@@ -37,6 +38,7 @@ export default function Join() {
 	const [copied, setCopied] = useState(false);
 	const [replyingTo, setReplyingTo] = useState<Chat | null>(null);
 	const [uploadingMedia, setUploadingMedia] = useState(false);
+	const [showConfirm, setShowConfirm] = useState(false);
 	const [previewMedia, setPreviewMedia] = useState<{
 		url: string;
 		type: string;
@@ -237,10 +239,60 @@ export default function Join() {
 		setShowEmojiPicker(false);
 		inputRef.current?.focus();
 	}
+	const dragRef = useRef<{ id: string | null; startX: number }>({
+		id: null,
+		startX: 0,
+	});
+
+	function handleTouchStart(e: React.TouchEvent, id: string) {
+		dragRef.current = {
+			id,
+			startX: e.touches[0].clientX,
+		};
+
+		const el = document.getElementById("msg-" + id);
+		if (el) el.style.transition = "none";
+	}
+
+	function handleTouchMove(e: React.TouchEvent) {
+		const dx = e.touches[0].clientX - dragRef.current.startX;
+		const el = document.getElementById("msg-" + dragRef.current.id);
+
+		if (!el || dx <= 0) return;
+
+		const MAX = 110;
+
+		// ⭐ rubber effect (WhatsApp style resistance)
+		const move = dx < MAX ? dx : MAX + (dx - MAX) * 0.25;
+
+		el.style.transform = `translateX(${move}px)`;
+	}
+
+	function handleTouchEnd(m: Chat) {
+		const el = document.getElementById("msg-" + m.id);
+		if (!el) return;
+
+		const matrix = new DOMMatrix(getComputedStyle(el).transform);
+		const moved = matrix.m41;
+
+		el.style.transition = "transform 0.25s cubic-bezier(.22,.61,.36,1)";
+
+		if (moved > 75) {
+			setReplyingTo(m);
+		}
+
+		el.style.transform = "translateX(0)";
+	}
+	function confirmEndChat() {
+		ws?.send(JSON.stringify({ type: "TERMINATE" }));
+		toast.error("Chat ended");
+		setTimeout(() => {
+			window.location.href = "/";
+		}, 1000);
+	}
 
 	function endChat() {
-		ws?.send(JSON.stringify({ type: "TERMINATE" }));
-		window.location.href = "/";
+		setShowConfirm(true);
 	}
 
 	function leaveChat() {
@@ -251,7 +303,12 @@ export default function Join() {
 	async function handleFile(e: any) {
 		const file = e.target.files[0];
 		if (!file || !ws) return;
+		const MAX_SIZE = 50 * 1024 * 1024;
 
+		if (file.size > MAX_SIZE) {
+			toast.error("File too large (max 50MB)");
+			return;
+		}
 		setUploadingMedia(true);
 
 		try {
@@ -296,18 +353,43 @@ export default function Join() {
 
 	/* ---------------- COPY ROOM ID ---------------- */
 	function copyRoomId() {
-		if (roomId) {
-			navigator.clipboard
-				.writeText(roomId)
-				.then(() => {
-					setCopied(true);
-					setTimeout(() => setCopied(false), 2000);
-				})
-				.catch(() => {
-					setError("Failed to copy room ID");
-					setTimeout(() => setError(null), 3000);
-				});
-		}
+		if (!roomId) return;
+
+		const copyModern = async () => {
+			try {
+				await navigator.clipboard.writeText(roomId);
+				return true;
+			} catch {
+				return false;
+			}
+		};
+
+		const copyFallback = () => {
+			const textArea = document.createElement("textarea");
+			textArea.value = roomId;
+			textArea.style.position = "fixed";
+			textArea.style.opacity = "0";
+			document.body.appendChild(textArea);
+
+			textArea.focus();
+			textArea.select();
+
+			const success = document.execCommand("copy");
+			document.body.removeChild(textArea);
+
+			return success;
+		};
+
+		(async () => {
+			const ok = (await copyModern()) || copyFallback();
+
+			if (ok) {
+				setCopied(true);
+				setTimeout(() => setCopied(false), 2000);
+			} else {
+				toast.error("Copy failed");
+			}
+		})();
 	}
 
 	/* ---------------- EMOJI HANDLER ---------------- */
@@ -382,12 +464,11 @@ export default function Join() {
 				</div>
 			</div>
 		);
-
 	const isGroupChat = maxSize > 2;
 
 	/* ---------------- UI ---------------- */
 	return (
-		<div className="flex flex-col bg-black text-white overflow-hidden h-[100dvh]">
+		<div className="flex flex-col bg-black text-white h-[100dvh] overflow-hidden">
 			{" "}
 			{/* ERROR TOAST */}
 			{error && (
@@ -405,11 +486,9 @@ export default function Join() {
 				<div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-2">
 					{/* Left - User Info */}
 					<div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-							<div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-sm font-bold flex-shrink-0">
-								{username.charAt(0).toUpperCase()}
-							</div>
-						{/* {!isGroupChat && (
-						)} */}
+						<div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-sm font-bold flex-shrink-0">
+							{username.charAt(0).toUpperCase()}
+						</div>
 						<div className="min-w-0 flex-1">
 							<p className="text-sm font-semibold truncate">{`${username}`}</p>
 							<div className="flex items-center gap-2 text-xs text-gray-500">
@@ -473,7 +552,15 @@ export default function Join() {
 
 					{messages.map((m) => {
 						return (
-							<div key={m.id} className={`flex gap-2 items-end ${m.me ? "flex-row-reverse" : "flex-row"} animate-messageIn`}>
+							<div
+								id={"msg-" + m.id}
+								key={m.id}
+								onDoubleClick={() => setReplyingTo(m)}
+								onTouchStart={(e) => handleTouchStart(e, m.id)}
+								onTouchMove={handleTouchMove}
+								onTouchEnd={() => handleTouchEnd(m)}
+								className={`group flex gap-2 items-center ${m.me ? "flex-row-reverse" : "flex-row"} animate-messageIn`}
+							>
 								{/* Avatar */}
 								{!m.me && (
 									<div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold">
@@ -481,12 +568,41 @@ export default function Join() {
 									</div>
 								)}
 
-								<div className={`max-w-[75%] sm:max-w-md flex flex-col ${m.me ? "items-end" : "items-start"}`}>
-									{/* ✅ ALWAYS SHOW NAME */}
-									{isGroupChat && m.sender && !m.me && <span className={`text-xs mb-1 font-medium px-1 ${m.me ? "text-purple-300 text-right" : "text-gray-400"}`}>{m.sender}</span>}
+								<div className={`relative max-w-[75%] sm:max-w-md flex flex-col ${m.me ? "items-center" : "items-start"}`}>
+									{/* Your existing reply button */}
+									{/* Name (unchanged) */}
+									{isGroupChat && m.sender && !m.me && <span className="text-xs mb-1 font-medium px-1 text-gray-400">{m.sender}</span>}
 
 									{/* Bubble */}
 									<div className={`px-3 sm:px-4 py-2 rounded-2xl text-sm break-words ${m.me ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white" : "bg-gray-900 text-white"}`}>
+										<button
+											onClick={() => setReplyingTo(m)}
+											className={`
+  absolute ${m.me ? "-left-9" : "-right-9"}
+  top-1/2 -translate-y-1/3
+  flex items-center justify-center
+  opacity-0 group-hover:opacity-100
+  scale-75 group-hover:scale-100
+  transition-all duration-200
+  bg-gray-800/90 backdrop-blur
+  hover:bg-gray-700
+  shadow-lg
+  p-2 rounded-full
+  active:scale-90
+`}
+										>
+											<svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+												<path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+											</svg>
+										</button>
+										{/* ✅ Reply preview */}
+										{m.replyTo && (
+											<div className={`mb-2 px-2 py-1 rounded-lg text-xs border-l-2 border-purple-500 ${m.me ? "bg-white/10" : "bg-gray-800"}`}>
+												{/* <p className="font-semibold text-purple-300 truncate">{m.replyTo.sender || "User"}</p> */}
+												<p className="truncate text-gray-300">{m.replyTo.text ?? "📷 Media"}</p>
+											</div>
+										)}
+
 										{m.text && <span>{m.text}</span>}
 
 										{m.file && m.file.type.startsWith("image") && (
@@ -499,22 +615,10 @@ export default function Join() {
 														type: m.file!.type,
 													})
 												}
-												draggable={false}
-												onContextMenu={(e) => e.preventDefault()}
-												alt="shared media"
 											/>
 										)}
 
-										{m.file && m.file.type.startsWith("video") && (
-											<video
-												src={m.file.url}
-												controls
-												controlsList="nodownload noplaybackrate noremoteplayback"
-												disablePictureInPicture
-												onContextMenu={(e) => e.preventDefault()}
-												className="rounded-2xl max-h-64 w-full object-contain mt-1"
-											/>
-										)}
+										{m.file && m.file.type.startsWith("video") && <video src={m.file.url} controls className="rounded-2xl max-h-64 w-full object-contain mt-1" />}
 									</div>
 								</div>
 							</div>
@@ -523,6 +627,38 @@ export default function Join() {
 					<div ref={bottomRef} />
 				</div>
 			</div>
+			{showConfirm && (
+				<div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fadeIn">
+					<div className="w-[90%] max-w-sm rounded-3xl bg-[#1c1c1e] border border-gray-800 shadow-2xl p-6 space-y-5 animate-slideUp">
+						{/* Icon */}
+						<div className="w-14 h-14 mx-auto rounded-full bg-red-500/10 flex items-center justify-center">
+							<svg className="w-7 h-7 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</div>
+
+						{/* Text */}
+						<div className="text-center space-y-1">
+							<h3 className="text-lg font-semibold text-white">End chat?</h3>
+							<p className="text-sm text-gray-400">This will delete the room for everyone.</p>
+						</div>
+
+						{/* Buttons */}
+						<div className="flex gap-3">
+							<button onClick={() => setShowConfirm(false)} className="flex-1 py-2.5 rounded-full bg-gray-800 hover:bg-gray-700 text-sm font-medium transition active:scale-95">
+								Cancel
+							</button>
+
+							<button
+								onClick={confirmEndChat}
+								className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 text-sm font-semibold transition active:scale-95"
+							>
+								End
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 			{/* EMOJI PICKER */}
 			{showEmojiPicker && (
 				<div
@@ -638,79 +774,6 @@ export default function Join() {
 					</div>
 				</div>
 			</div>
-			<style>{`
-				/* Message In Animation */
-				@keyframes messageIn {
-					from {
-						opacity: 0;
-						transform: scale(0.95) translateY(10px);
-					}
-					to {
-						opacity: 1;
-						transform: scale(1) translateY(0);
-					}
-				}
-
-				.animate-messageIn {
-					animation: messageIn 0.2s ease-out;
-				}
-
-				/* Slide Up Animation */
-				@keyframes slideUp {
-					from {
-						opacity: 0;
-						transform: translateY(20px);
-					}
-					to {
-						opacity: 1;
-						transform: translateY(0);
-					}
-				}
-
-				.animate-slideUp {
-					animation: slideUp 0.2s ease-out;
-				}
-
-				/* Slide Down Animation */
-				@keyframes slideDown {
-					from {
-						opacity: 0;
-						transform: translate(-50%, -20px);
-					}
-					to {
-						opacity: 1;
-						transform: translate(-50%, 0);
-					}
-				}
-
-				.animate-slideDown {
-					animation: slideDown 0.3s ease-out;
-				}
-
-				/* Custom Scrollbar */
-				.custom-scrollbar::-webkit-scrollbar {
-					width: 6px;
-				}
-
-				.custom-scrollbar::-webkit-scrollbar-track {
-					background: transparent;
-				}
-
-				.custom-scrollbar::-webkit-scrollbar-thumb {
-					background: #3a3a3c;
-					border-radius: 3px;
-				}
-
-				.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-					background: #48484a;
-				}
-
-				/* Prevent text selection during drag */
-				.select-none {
-					user-select: none;
-					-webkit-user-select: none;
-				}
-			`}</style>
 			{/* MEDIA PREVIEW MODAL */}
 			{previewMedia && (
 				<div className="fixed inset-0 z-[9999] bg-black" style={{ height: "100dvh", width: "100vw" }} onClick={() => setPreviewMedia(null)}>

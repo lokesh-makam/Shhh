@@ -58,7 +58,6 @@ class UserManager {
             };
         }
         if (room.maxSize <= room.socket.size) {
-            console.log("room is full");
             return {
                 ok: false,
                 error: "INVALID_ROOM_SIZE",
@@ -80,14 +79,13 @@ class UserManager {
             roomId,
             role,
             name: (_a = this.users.get(userId)) === null || _a === void 0 ? void 0 : _a.name,
-            maxSize: room.socket.size,
+            maxSize: room.maxSize,
         };
     }
     leaveChat(roomId, userId) {
         const room = this.getRoom(roomId);
         const user = this.users.get(userId);
         if (!room || !user) {
-            console.log("room or User not exists");
             return {
                 ok: false,
                 error: "ROOM_NOT_EXISTS",
@@ -97,45 +95,28 @@ class UserManager {
         room.socket.delete(user.socket);
         this.socketToUser.delete(user.socket);
         this.users.delete(userId);
-        console.log("user left the chat..");
-        console.log("No of players present in the chat are " + room.socket.size);
-        if (room.joinOrder.length > 0) {
+        if (user.role === "ADMIN" || room.joinOrder.length > 0) {
             const curUser = this.users.get(room.joinOrder[0]);
             if (!curUser) {
-                console.log("room or User not exists");
                 return {
                     ok: false,
                     error: "ROOM_NOT_EXISTS",
                 };
             }
-            if (user.role === "ADMIN") {
-                curUser.role = "ADMIN";
-                curUser.socket.send(JSON.stringify({
-                    type: "ADMIN_CHANGED",
-                    payload: {
-                        userId,
-                        role: user.role,
-                        maxSize: room.maxSize,
-                        size: room.socket.size,
-                    },
-                }));
-            }
-            else {
-                curUser.socket.send(JSON.stringify({
-                    type: "LEFT_CHAT",
-                    payload: {
-                        userId,
-                        role: user.role,
-                        size: room.socket.size,
-                    },
-                }));
-            }
+            curUser.role = "ADMIN";
+            curUser.socket.send(JSON.stringify({
+                type: "ADMIN_CHANGED",
+                payload: {
+                    userId,
+                    role: user.role,
+                    maxSize: room.maxSize,
+                },
+            }));
         }
         if (room.socket.size == 0) {
             setTimeout(() => {
                 if (room.socket.size == 0) {
                     this.rooms.delete(roomId);
-                    console.log("no users present room deleted");
                 }
             }, 10000);
         }
@@ -252,7 +233,6 @@ class UserManager {
     handleDisconnect(ws) {
         const userId = this.socketToUser.get(ws);
         if (!userId) {
-            console.log("room not exist 4");
             return {
                 ok: false,
                 error: "USER_NOT_FOUND",
@@ -260,7 +240,6 @@ class UserManager {
         }
         const user = this.users.get(userId);
         if (!user) {
-            console.log("room not exist 5");
             return {
                 ok: false,
                 error: "USER_NOT_FOUND",

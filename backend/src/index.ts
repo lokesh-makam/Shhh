@@ -5,10 +5,6 @@ import { UserManager } from "./store/UserManager";
 
 const app = express();
 const userManager = new UserManager();
-app.get("/", (req: Request, res: Response) => {
-	res.send("Server running");
-});
-
 const server = http.createServer(app);
 
 const wss = new WebSocketServer({
@@ -28,7 +24,6 @@ function sendError(ws: WebSocket, message: string) {
 }
 
 wss.on("connection", (ws: WebSocket) => {
-	console.log("client connected");
 	ws.on("error", (err) => {
 		console.error("Socket error:", err.message);
 		ws.terminate();
@@ -66,7 +61,6 @@ wss.on("connection", (ws: WebSocket) => {
 					sendError(ws, result.error!);
 					return;
 				}
-				console.log("room created id:" + JSON.stringify(result.roomId));
 				ws.send(
 					JSON.stringify({
 						type: "ROOM_CREATED",
@@ -106,10 +100,7 @@ wss.on("connection", (ws: WebSocket) => {
 
 	ws.on("close", () => {
 		userManager.handleDisconnect(ws);
-		console.log("Client disconnected");
 	});
 });
 
-server.listen(8080, "0.0.0.0", () => {
-	console.log("Server running on port 8080");
-});
+server.listen(8080);
