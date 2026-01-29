@@ -10,6 +10,7 @@ export default function Home() {
 	const [roomIdInput, setRoomIdInput] = useState("");
 	const [mode, setMode] = useState<"create" | "join" | null>(null);
 	const [error, setError] = useState("");
+	const [name, setName] = useState("");
 
 	useEffect(() => {
 		if (!ws) return;
@@ -17,7 +18,9 @@ export default function Home() {
 		const handler = (event: MessageEvent) => {
 			const data = JSON.parse(event.data);
 			if (data.type === "ROOM_CREATED") {
-				navigate(`/join/${data.payload.roomId}`);
+				navigate(`/join/${data.payload.roomId}`, {
+					state: { name },
+				});
 			}
 			if (data.type === "ERROR") {
 				const message = data.payload.message;
@@ -27,9 +30,14 @@ export default function Home() {
 
 		ws.addEventListener("message", handler);
 		return () => ws.removeEventListener("message", handler);
-	}, [ws, navigate]);
+	}, [ws, navigate, name]);
 
 	function createRoom() {
+		if (!name.trim()) {
+			setError("Please enter your name");
+			setTimeout(() => setError(""), 3000);
+			return;
+		}
 		const maxSize = parseInt(members);
 		if (!members || isNaN(maxSize) || maxSize < 2 || maxSize > 10) {
 			setError("Please enter a number between 2 and 10");
@@ -40,12 +48,20 @@ export default function Home() {
 	}
 
 	function handleJoinRoom() {
+		if (!name.trim()) {
+			setError("Please enter your name");
+			setTimeout(() => setError(""), 3000);
+			return;
+		}
+
 		if (!roomIdInput.trim()) {
 			setError("Please enter a valid Room ID");
 			setTimeout(() => setError(""), 3000);
 			return;
 		}
-		navigate(`/join/${roomIdInput}`);
+		navigate(`/join/${roomIdInput}`, {
+			state: { name },
+		});
 	}
 
 	return (
@@ -83,6 +99,14 @@ export default function Home() {
 					</div>
 
 					{/* Action Buttons */}
+					<div className="w-full max-w-md px-4 sm:px-0">
+						<input
+							value={name}
+							onChange={(e) => setName(e.target.value)}
+							placeholder="Enter your name"
+							className="w-full px-4 py-3 sm:py-3.5 rounded-lg bg-[#1A1F2E] border border-gray-700/50 focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500/20 transition-all text-white text-sm sm:text-base placeholder-gray-500"
+						/>
+					</div>
 					<div className="w-full max-w-md grid grid-cols-2 gap-3 sm:gap-4 px-4 sm:px-0 animate-fade-in-up animation-delay-200">
 						<button
 							onClick={() => {

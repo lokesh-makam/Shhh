@@ -37,7 +37,7 @@ wss.on("connection", (ws) => {
             const type = data.type;
             const payload = data.payload;
             if (type === "JOIN_ROOM") {
-                const result = userManager.joinChat(payload.roomId, ws);
+                const result = userManager.joinChat(payload.roomId, payload.username, ws);
                 if (!result.ok) {
                     sendError(ws, result.error);
                     return;
@@ -47,7 +47,7 @@ wss.on("connection", (ws) => {
                     payload: {
                         roomId: result.roomId,
                         role: result.role,
-                        name: result.name,
+                        username: result.name,
                         maxSize: result.maxSize,
                     },
                 }));

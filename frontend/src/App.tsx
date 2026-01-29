@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Home from "./components/Home";
-import Join from "./components/Join";
+import Join from "./components/Join/Join";
 import { SocketProvider } from "./context/SocketProvider";
 import { Toaster } from "react-hot-toast";
 function App() {

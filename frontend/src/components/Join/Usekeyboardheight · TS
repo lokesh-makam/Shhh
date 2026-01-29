@@ -1,0 +1,31 @@
+import { useEffect, useState } from "react";
+
+export function useKeyboardHeight() {
+	const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+	useEffect(() => {
+		// Only run on mobile devices
+		if (typeof window === "undefined") return;
+
+		const updateHeight = () => {
+			// Get the visual viewport height (excludes keyboard)
+			const visualViewportHeight = window.visualViewport?.height || window.innerHeight;
+			// Get the full window height
+			const windowHeight = window.innerHeight;
+			// Calculate keyboard height
+			const kbHeight = windowHeight - visualViewportHeight;
+			setKeyboardHeight(kbHeight);
+		};
+
+		// Listen to visual viewport resize
+		window.visualViewport?.addEventListener("resize", updateHeight);
+		window.visualViewport?.addEventListener("scroll", updateHeight);
+
+		return () => {
+			window.visualViewport?.removeEventListener("resize", updateHeight);
+			window.visualViewport?.removeEventListener("scroll", updateHeight);
+		};
+	}, []);
+
+	return keyboardHeight;
+}

@@ -345,8 +345,15 @@ input[type="number"] {
 	background: #48484a;
 }
 
-/* Prevent text selection during drag */
 .select-none {
 	user-select: none;
 	-webkit-user-select: none;
+}
+
+video::-webkit-media-controls-download-button {
+	display: none !important;
+}
+
+video::-webkit-media-controls-enclosure {
+	overflow: hidden;
 }

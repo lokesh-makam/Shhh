@@ -47,7 +47,7 @@ class UserManager {
             roomId,
         };
     }
-    joinChat(roomId, socket) {
+    joinChat(roomId, name, socket) {
         var _a;
         const userId = this.generateUserId();
         const room = this.getRoom(roomId);
@@ -68,7 +68,7 @@ class UserManager {
         room.joinOrder.push(userId);
         this.users.set(userId, {
             userId,
-            name: "lokesh",
+            name,
             role,
             roomId,
             socket,

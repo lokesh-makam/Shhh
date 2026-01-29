@@ -71,7 +71,7 @@ export class UserManager {
 		};
 	}
 
-	joinChat(roomId: string, socket: WebSocket) {
+	joinChat(roomId: string, name: string, socket: WebSocket) {
 		const userId = this.generateUserId();
 		const room = this.getRoom(roomId);
 		if (!room) {
@@ -91,7 +91,7 @@ export class UserManager {
 		room.joinOrder.push(userId);
 		this.users.set(userId, {
 			userId,
-			name: "lokesh",
+			name,
 			role,
 			roomId,
 			socket,
