@@ -1,5 +1,3 @@
-import React from "react";
-
 export default function InvalidRoomScreen() {
 	return (
 		<div className="h-screen flex items-center justify-center bg-black p-4">
