@@ -1,1 +1,5 @@
-const ws = new WebSocket(import.meta.env.VITE_WS_URL);
+const WS_URL = import.meta.env.VITE_WS_URL;
+
+export function createSocket() {
+	return new WebSocket(WS_URL);
+}
